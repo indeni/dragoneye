@@ -87,12 +87,16 @@ class TestAzureScanner(unittest.TestCase):
             value = results['value']
             self.assertTrue(any(dic['vmName'] == f'{self.resource_groups[0]}-vm' for dic in value))
             self.assertTrue(any(dic['vmName'] == f'{self.resource_groups[1]}-vm' for dic in value))
+            self.assertTrue(any(dic['resourceGroup'] == self.resource_groups[0] for dic in value))
+            self.assertTrue(any(dic['resourceGroup'] == self.resource_groups[1] for dic in value))
 
         with open(os.path.join(account_data_dir, 'request2.json'), 'r') as result_file:
             results = json.load(result_file)
             value = results['value']
             self.assertTrue(any(dic['vmName'] == f'{self.resource_groups[0]}-vm' for dic in value))
             self.assertTrue(any(dic['vmName'] == f'{self.resource_groups[1]}-vm' for dic in value))
+            self.assertTrue(any(dic['resourceGroup'] == self.resource_groups[0] for dic in value))
+            self.assertTrue(any(dic['resourceGroup'] == self.resource_groups[1] for dic in value))
 
     def test_scan_ok_no_resources(self):
         # Arrange
@@ -207,12 +211,16 @@ class TestAzureScanner(unittest.TestCase):
             value = results['value']
             self.assertTrue(any(dic['vmName'] == f'{self.resource_groups[0]}-vm' for dic in value))
             self.assertTrue(any(dic['vmName'] == f'{self.resource_groups[1]}-vm' for dic in value))
+            self.assertTrue(any(dic['resourceGroup'] == self.resource_groups[0] for dic in value))
+            self.assertTrue(any(dic['resourceGroup'] == self.resource_groups[1] for dic in value))
 
         with open(os.path.join(account_data_dir, 'request2.json'), 'r') as result_file:
             results = json.load(result_file)
             value = results['value']
             self.assertTrue(any(dic['vmName'] == f'{self.resource_groups[0]}-vm' for dic in value))
             self.assertTrue(any(dic['vmName'] == f'{self.resource_groups[1]}-vm' for dic in value))
+            self.assertTrue(any(dic['resourceGroup'] == self.resource_groups[0] for dic in value))
+            self.assertTrue(any(dic['resourceGroup'] == self.resource_groups[1] for dic in value))
 
         call_args = '\n'.join(str(arg) for arg in patched_logger.call_args)
         self.assertIn('some exception', call_args)
