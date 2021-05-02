@@ -24,7 +24,9 @@ class TestAzureScanner(unittest.TestCase):
         self.azure_settings = AzureCloudScanSettings(
             commands_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'azure_scan_commands.yaml'),
             subscription_id=self.subscription_id,
-            account_name=self.account_name, should_clean_before_scan=True, output_path=self.temp_dir.name
+            account_name=self.account_name, 
+            should_clean_before_scan=True,
+            output_path=self.temp_dir.name
         )
         when(dragoneye.cloud_scanner.azure.azure_scanner).invoke_get_request(ANY, ANY).thenReturn(mock({'status_code': 200, 'text': '{}'}))
 
