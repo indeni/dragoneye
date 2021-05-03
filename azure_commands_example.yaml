@@ -12,3 +12,18 @@
   Parameters:
     - Name: vmName resourceGroupName
       Value: virtual-machines.json|.value[] | .name + " " + .resourceGroup
+
+- Request: https://management.azure.com/subscriptions/{subscriptionId}/providers/Microsoft.Sql/servers?api-version=2020-11-01-preview
+  Name: sql-servers
+
+- Request: https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}?api-version=2020-11-01-preview
+  Name: sql-servers-info
+  Parameters:
+    - Name: serverName
+      Value: sql-servers.json|.value[] | .name
+
+- Request: https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/firewallRules?api-version=2020-11-01-preview
+  Name: sql-servers-fire-walls-rules
+  Parameters:
+    - Name: serverName
+      Value: sql-servers.json|.value[] | .name

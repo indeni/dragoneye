@@ -1,24 +1,24 @@
-import concurrent
+import collections
 import copy
+import logging
 import os.path
 import os
 import re
-from concurrent.futures._base import ALL_COMPLETED
-from concurrent.futures.thread import ThreadPoolExecutor
-import logging
 import json
 import time
-from typing import List, Dict
+from queue import Queue
+from typing import List, Dict, Optional, Deque
 
 import urllib.parse
-from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError
+from botocore.exceptions import ClientError, EndpointConnectionError
 from botocore.config import Config
 
-from dragoneye.cloud_scanner.aws.aws_scan_request import AwsCloudScanSettings
+from dragoneye.cloud_scanner.aws.aws_scan_settings import AwsCloudScanSettings
 from dragoneye.cloud_scanner.base_cloud_scanner import BaseCloudScanner
-from dragoneye.dragoneye_exception import DragoneyeException
+from dragoneye.utils.app_logger import logger
 from dragoneye.utils.misc_utils import get_dynamic_values_from_files, custom_serializer, make_directory, init_directory, load_yaml, snakecase, \
     elapsed_time
+from dragoneye.utils.threading_utils import execute_parallel_functions_in_threads, ThreadedFunctionData
 
 MAX_RETRIES = 3
 
@@ -28,42 +28,9 @@ class AwsScanner(BaseCloudScanner):
     def __init__(self, session, settings: AwsCloudScanSettings):
         self.session = session
         self.settings = settings
-
-    @elapsed_time
-    def scan(self) -> str:
-        logging.getLogger("botocore").setLevel(logging.WARN)
-        account_name = self.settings.account_name
-        session = self.session
-        account_data_dir = init_directory(self.settings.output_path, account_name, self.settings.clean)
-        summary = []
-
-        regions_filter = None
-        if len(self.settings.regions_filter) > 0:
-            regions_filter = self.settings.regions_filter.lower().split(",")
-            # Force include of default region -- seems to be required
-            if self.settings.default_region not in regions_filter:
-                regions_filter.append(self.settings.default_region)
-
-        print("* Getting region names", flush=True)
-        ec2 = session.client("ec2")
-        region_list = ec2.describe_regions()
-
-        if regions_filter is not None:
-            filtered_regions = [r for r in region_list["Regions"] if r["RegionName"] in regions_filter]
-            region_list["Regions"] = filtered_regions
-
-        with open(f"{account_data_dir}/describe-regions.json", "w+") as file:
-            file.write(json.dumps(region_list, indent=4, sort_keys=True))
-
-        print("* Creating directory for each region name", flush=True)
-        region_dict_list: List[dict] = region_list["Regions"]
-
-        for region in region_dict_list:
-            make_directory(os.path.join(account_data_dir, region.get("RegionName", "Unknown")))
-
-        # Services that will only be queried in the default_
+        # Services that will only be queried in the default region
         # TODO: Identify these from boto
-        universal_services = [
+        self.universal_services = [
             "iam",
             "route53",
             "route53domains",
@@ -71,29 +38,82 @@ class AwsScanner(BaseCloudScanner):
             "cloudfront",
             "organizations",
         ]
+        self.scan_commands = None
+        self.default_region = settings.default_region or self.session.region_name
+        if self.default_region is None:
+            raise ValueError('Default region cannot be empty. '
+                             'You must specify the default region or set the AWS_DEFAULT_REGION environment variable')
+        logging.getLogger("botocore").setLevel(logging.WARN)
 
-        collect_commands = load_yaml(self.settings.commands_path)
+    @elapsed_time('Scanning AWS live environment took {} seconds')
+    def scan(self) -> str:
+        self.scan_commands = load_yaml(self.settings.commands_path)
+        account_data_dir = init_directory(self.settings.output_path, self.settings.account_name, self.settings.clean)
+        region_dict_list = self._create_regions_file_structure(account_data_dir)
 
-        executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=10)
-        dependable_commands = [command for command in collect_commands if command.get("Parameters", False)]
-        non_dependable_commands = [command for command in collect_commands if not command.get("Parameters", False)]
+        summary: Queue = Queue()
+        tasks: List[ThreadedFunctionData] = []
+
         for region in region_dict_list:
-            executor.submit(self._collect_region_data, region, dependable_commands, non_dependable_commands, session,
-                            universal_services, self.settings, account_data_dir, summary)
-        executor.shutdown(True)
+            tasks.append(ThreadedFunctionData(
+                self._scan_region_data,
+                (region, account_data_dir, summary),
+                'An unknown exception has occurred'
+            ))
 
-        # Print summary
-        print("--------------------------------------------------------------------")
+        deque_tasks: Deque[List[ThreadedFunctionData]] = collections.deque()
+        deque_tasks.append(tasks)
+        execute_parallel_functions_in_threads(deque_tasks, len(region_dict_list))
+
+        self._print_summary(summary)
+
+        return os.path.abspath(os.path.join(account_data_dir, '..'))
+
+    def _create_regions_file_structure(self, base_path: str):
+        region_list = self._get_region_list()
+
+        with open(f"{base_path}/describe-regions.json", "w+") as file:
+            file.write(json.dumps(region_list, indent=4, sort_keys=True))
+
+        logger.info("* Creating directory for each region name")
+        region_dict_list: List[dict] = region_list["Regions"]
+
+        for region in region_dict_list:
+            make_directory(os.path.join(base_path, region.get("RegionName", "Unknown")))
+
+        return region_dict_list
+
+    def _get_region_list(self):
+        regions_filter = None
+        if len(self.settings.regions_filter) > 0:
+            regions_filter = self.settings.regions_filter.lower().split(",")
+            # Force include of default region -- seems to be required
+            if self.default_region not in regions_filter:
+                regions_filter.append(self.default_region)
+
+        logger.info("* Getting region names")
+        ec2 = self.session.client("ec2", region_name=self.default_region)
+        region_list = ec2.describe_regions()
+
+        if regions_filter is not None:
+            filtered_regions = [r for r in region_list["Regions"] if r["RegionName"] in regions_filter]
+            region_list["Regions"] = filtered_regions
+
+        return region_list
+
+    @staticmethod
+    def _print_summary(summary: Queue):
+        logger.info("--------------------------------------------------------------------")
         failures = []
-        for call_summary in summary:
+        for call_summary in summary.queue:
             if "exception" in call_summary:
                 failures.append(call_summary)
 
-        print("Summary: {} APIs called. {} errors".format(len(summary), len(failures)))
+        logger.info("Summary: {} APIs called. {} errors".format(len(summary.queue), len(failures)))
         if len(failures) > 0:
-            print("Failures:")
+            logger.warning("Failures:")
             for call_summary in failures:
-                print(
+                logger.warning(
                     "  {}.{}({}): {}".format(
                         call_summary["service"],
                         call_summary["action"],
@@ -101,8 +121,6 @@ class AwsScanner(BaseCloudScanner):
                         call_summary["exception"],
                     )
                 )
-            # Ensure errors can be detected
-        return os.path.abspath(os.path.join(account_data_dir, '..'))
 
     @staticmethod
     def _get_identifier_from_parameter(parameter):
@@ -132,7 +150,7 @@ class AwsScanner(BaseCloudScanner):
         return urllib.parse.quote_plus(filename)
 
     @staticmethod
-    def _call_function(outputfile, handler, method_to_call, parameters, check, summary):
+    def _get_and_save_data(output_file, handler, method_to_call, parameters, checks, region, summary: Queue):
         """
         Calls the AWS API function and downloads the data
 
@@ -141,219 +159,267 @@ class AwsScanner(BaseCloudScanner):
         """
         # TODO: Decorate this with rate limiters from
         # https://github.com/Netflix-Skunkworks/cloudaux/blob/master/cloudaux/aws/decorators.py
-
-        data = {}
-        if os.path.isfile(outputfile):
-            # Data already collected, so skip
-            print("  Response already collected at {}".format(outputfile), flush=True)
+        if os.path.isfile(output_file):
+            # Data already scanned, so skip
+            logger.warning("  Response already present at {}".format(output_file))
             return
 
         call_summary = {
             "service": handler.meta.service_model.service_name,
             "action": method_to_call,
             "parameters": parameters,
+            "region": region
         }
 
-        print("  Making call for {}".format(outputfile), flush=True)
+        data = AwsScanner._get_data(output_file, handler, method_to_call, parameters, checks, call_summary)
+        AwsScanner._remove_unused_values(data)
+        AwsScanner._save_results_to_file(output_file, data)
+
+        logger.info("finished call for {}".format(output_file))
+        summary.put_nowait(call_summary)
+
+    @staticmethod
+    def _get_data(output_file, handler, method_to_call, parameters, checks, call_summary):
+        logger.info("  Making call for {}".format(output_file))
+        data = None
         try:
             for retries in range(MAX_RETRIES):
-                if handler.can_paginate(method_to_call):
-                    paginator = handler.get_paginator(method_to_call)
-                    page_iterator = paginator.paginate(**parameters)
-                    for response in page_iterator:
-                        if not data:
-                            data = response
-
-                        else:
-                            print("  ...paginating {}".format(outputfile), flush=True)
-                            for k in data:
-                                if isinstance(data[k], list):
-                                    data[k].extend(response[k])
-                else:
-                    function = getattr(handler, method_to_call)
-                    data = function(**parameters)
-
-                if check is not None:
-                    if data[check[0]["Name"]] == check[0]["Value"]:
-                        continue
-                    if retries == MAX_RETRIES - 1:
-                        raise Exception(
-                            "Check value {} never set as {} in response".format(
-                                check["Name"], check["Value"]
-                            )
-                        )
-                    print("  Sleeping and retrying")
-                    time.sleep(3)
-                else:
+                data = AwsScanner._call_boto_function(output_file, handler, method_to_call, parameters)
+                if not checks or AwsScanner._is_data_passing_check(data, checks):
                     break
+                elif retries == MAX_RETRIES - 1:
+                    raise Exception(
+                        "One of the following checks has repeatedly failed: {}".format(
+                            ', '.join(f'{check["Name"]}={check["Value"]}' for check in checks)
+                        )
+                    )
+                else:
+                    logger.info("  Sleeping and retrying")
+                    time.sleep(3)
 
         except ClientError as ex:
             if "NoSuchBucketPolicy" in str(ex):
                 # This error occurs when you try to get the bucket policy for a bucket that has no bucket policy, so this can be ignored.
-                print("  - No bucket policy")
+                logger.warning("  - No bucket policy")
             elif "NoSuchPublicAccessBlockConfiguration" in str(ex):
                 # This error occurs when you try to get the account Public Access Block policy for an account that has none, so this can be ignored.
-                print("  - No public access block set")
+                logger.warning("  - No public access block set")
             elif (
                     "ServerSideEncryptionConfigurationNotFoundError" in str(ex)
                     and call_summary["service"] == "s3"
                     and call_summary["action"] == "get_bucket_encryption"
             ):
-                print("  - No encryption set")
+                logger.warning("  - No encryption set")
             elif (
                     "NoSuchEntity" in str(ex)
                     and call_summary["action"] == "get_account_password_policy"
             ):
-                print("  - No password policy set")
+                logger.warning("  - No password policy set")
             elif (
                     "AccessDeniedException" in str(ex)
                     and call_summary["service"] == "organizations"
                     and call_summary["action"] == "list_accounts"
             ):
-                print("  - Denied, which likely means this is not the organization root")
+                logger.warning("  - Denied, which likely means this is not the organization root")
             elif (
                     "RepositoryPolicyNotFoundException" in str(ex)
                     and call_summary["service"] == "ecr"
                     and call_summary["action"] == "get_repository_policy"
             ):
-                print("  - No policy exists")
+                logger.warning("  - No policy exists")
             elif (
                     "ResourceNotFoundException" in str(ex)
                     and call_summary["service"] == "lambda"
                     and call_summary["action"] == "get_policy"
             ):
-                print("  - No policy exists")
+                logger.warning("  - No policy exists")
             elif (
                     "AccessDeniedException" in str(ex)
                     and call_summary["service"] == "kms"
                     and call_summary["action"] == "list_key_policies"
             ):
-                print("  - Denied, which should mean this KMS has restricted access")
+                logger.warning("  - Denied, which should mean this KMS has restricted access")
             elif (
                     "AccessDeniedException" in str(ex)
                     and call_summary["service"] == "kms"
                     and call_summary["action"] == "list_grants"
             ):
-                print("  - Denied, which should mean this KMS has restricted access")
+                logger.warning("  - Denied, which should mean this KMS has restricted access")
             elif (
                     "AccessDeniedException" in str(ex)
                     and call_summary["service"] == "kms"
                     and call_summary["action"] == "get_key_policy"
             ):
-                print("  - Denied, which should mean this KMS has restricted access")
+                logger.warning("  - Denied, which should mean this KMS has restricted access")
             elif (
                     "AccessDeniedException" in str(ex)
                     and call_summary["service"] == "kms"
                     and call_summary["action"] == "get_key_rotation_status"
             ):
-                print("  - Denied, which should mean this KMS has restricted access")
+                logger.warning("  - Denied, which should mean this KMS has restricted access")
             elif "AWSOrganizationsNotInUseException" in str(ex):
-                print(' - Your account is not a member of an organization.')
+                logger.warning(' - Your account is not a member of an organization.')
+            elif (
+                    "EntityNotFoundException" in str(ex)
+                    and call_summary["service"] == "glue"
+                    and call_summary["action"] == "get_resource_policy"
+            ):
+                logger.warning(f' - Glue policy does not exist on region {call_summary["region"]}')
+            elif (
+                    "NoSuchEntity" in str(ex)
+            ):
+                logger.warning(f"  - {str(ex)}")
+            elif (
+                    "NoSuchAccessPointPolicy" in str(ex)
+            ):
+                logger.warning(f"  - {str(ex)}")
             else:
-                print(f"ClientError {retries}: {ex}", flush=True)
+                logger.warning(f"ClientError {retries}: {ex}")
                 call_summary["exception"] = ex
         except EndpointConnectionError as ex:
-            print("EndpointConnectionError: {}".format(ex), flush=True)
+            logger.warning("EndpointConnectionError: {}".format(ex))
             call_summary["exception"] = ex
         except Exception as ex:
-            print("Exception: {}".format(ex), flush=True)
+            logger.warning("Exception: {}".format(ex))
             call_summary["exception"] = ex
 
-        # Remove unused values
+        return data
+
+    @staticmethod
+    def _call_boto_function(output_file, handler, method_to_call, parameters):
+        data = {}
+        if handler.can_paginate(method_to_call):
+            paginator = handler.get_paginator(method_to_call)
+            page_iterator = paginator.paginate(**parameters)
+            for response in page_iterator:
+                if not data:
+                    data = response
+
+                else:
+                    logger.info("  ...paginating {}".format(output_file))
+                    for k in data:
+                        if isinstance(data[k], list):
+                            data[k].extend(response[k])
+        else:
+            function = getattr(handler, method_to_call)
+            data = function(**parameters)
+
+        return data
+
+    @staticmethod
+    def _is_data_passing_check(data: dict, checks: Optional[dict]) -> bool:
+        if checks:
+            for check in checks:
+                if data[check["Name"]] == check["Value"]:
+                    pass
+                else:
+                    return False
+        return True
+
+    @staticmethod
+    def _remove_unused_values(data: dict) -> None:
         if data is not None:
             data.pop("ResponseMetadata", None)
             data.pop("Marker", None)
             data.pop("IsTruncated", None)
 
+    @staticmethod
+    def _save_results_to_file(output_file: str, data: Optional[Dict]) -> None:
         if data is not None:
-            with open(outputfile, "w+") as file:
+            with open(output_file, "w+") as file:
                 file.write(
                     json.dumps(data, indent=4, sort_keys=True, default=custom_serializer)
                 )
 
-        print("finished call for {}".format(outputfile), flush=True)
-        summary.append(call_summary)
-
-    def _collect_command_data(self, region, runner, session, universal_services, arguments, account_dir, summary):
-        executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=20)
-        tasks = []
+    def _run_scan_commands(self, region, runner, account_dir, summary: Queue):
         region = copy.deepcopy(region)
         runner = copy.deepcopy(runner)
-        print(
-            "* Getting {}:{}:{} info".format(region["RegionName"], runner["Service"], runner["Request"]),
-            flush=True,
-        )
-        # Only call universal services in default region
-        if runner["Service"] in universal_services:
-            if region["RegionName"] != arguments.default_region:
-                return
-        elif runner["Service"] != 'eks' and region["RegionName"] not in session.get_available_regions(runner["Service"]):
-            print("Skipping region {}, as {} does not exist there"
-                  .format(region["RegionName"], runner["Service"]))
-            return
-        handler = session.client(
-            runner["Service"], region_name=region["RegionName"],
-            config=Config(retries={'max_attempts': arguments.max_attempts, 'mode': 'standard'},
-                          max_pool_connections=arguments.max_pool_connections)
+        region_name = region["RegionName"]
+        logger.info(
+            "* Getting {}:{}:{} info".format(region["RegionName"], runner["Service"], runner["Request"])
         )
 
-        filepath = os.path.join(account_dir, region["RegionName"], f'{runner["Service"]}--{runner["Request"]}')
+        if not self._should_run_command_on_region(runner, region):
+            return
+        handler = self.session.client(
+            runner["Service"], region_name=region["RegionName"],
+            config=Config(retries={'max_attempts': self.settings.max_attempts, 'mode': 'standard'},
+                          max_pool_connections=self.settings.max_pool_connections)
+        )
+
+        filepath = os.path.join(account_dir, region["RegionName"], f'{runner["Service"]}-{runner["Request"]}')
 
         method_to_call = snakecase(runner["Request"])
-        param_groups = []
         parameter_keys = set()
-        for parameter in runner.get("Parameters", []):
-            name = parameter["Name"]
-            value = parameter["Value"]
-            is_dynamic = "|" in value
-            parameter_keys.add(name)
-            if not is_dynamic:
-                param_groups = self._fill_simple_params(param_groups, name, value)
-            else:
-                group = parameter.get("Group", False)
-                param_groups = self._fill_dynamic_params(param_groups, name, value, group, account_dir, region)
+        param_groups = self._get_parameter_group(runner, account_dir, region, parameter_keys)
+
+        tasks: List[ThreadedFunctionData] = []
 
         if runner.get("Parameters"):
             make_directory(filepath)
             for param_group in param_groups:
                 if set(param_group.keys()) != parameter_keys:
                     continue
-                file_name = urllib.parse.quote_plus('_'.join([f'{k}-{v}' for k, v in param_group.items()]))
+                unparsed_file_name = '_'.join([f'{k}-{v}' if not isinstance(v, list) else k for k, v in param_group.items()])
+                file_name = urllib.parse.quote_plus(unparsed_file_name)
                 output_file = f"{filepath}/{file_name}.json"
-                tasks.append(executor.submit(AwsScanner._call_function,
-                                             output_file,
-                                             handler,
-                                             method_to_call,
-                                             param_group,
-                                             runner.get("Check", None),
-                                             summary,
-                                             ))
+                tasks.append(ThreadedFunctionData(
+                    AwsScanner._get_and_save_data,
+                    (output_file,
+                     handler,
+                     method_to_call,
+                     param_group,
+                     runner.get("Check", None),
+                     region_name,
+                     summary),
+                    'exception on command {}'.format(runner),
+                    'timeout on command {}'.format(runner)))
         else:
-            filepath = filepath + ".json"
-            tasks.append(executor.submit(AwsScanner._call_function,
-                                         filepath,
-                                         handler,
-                                         method_to_call,
-                                         {},
-                                         runner.get("Check", None),
-                                         summary,
-                                         ))
-        concurrent.futures.wait(tasks, timeout=arguments.command_timeout, return_when=ALL_COMPLETED)
-        timeout_tasks = [task for task in tasks if task.running()]
-        if timeout_tasks:
-            logging.exception('timeout command {}'.format(runner))
-        for timeout_task in timeout_tasks:
-            timeout_task.cancel()
+            output_file = filepath + ".json"
+            tasks.append(ThreadedFunctionData(
+                AwsScanner._get_and_save_data,
+                (output_file,
+                 handler,
+                 method_to_call,
+                 {},
+                 runner.get("Check", None),
+                 region_name,
+                 summary), 'exception on command {}'.format(runner), 'timeout on command {}'.format(runner)))
 
-    def _collect_region_data(self, region, dependable_commands, non_dependable_commands, session, universal_services, arguments,
-                             account_dir, summary):
-        executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=20)
-        for command in non_dependable_commands:
-            executor.submit(self._collect_command_data, region, command, session, universal_services, arguments, account_dir, summary)
-        executor.shutdown(True)
+        deque_tasks: Deque[List[ThreadedFunctionData]] = collections.deque()
+        deque_tasks.append(tasks)
+        max_workers = 10 if runner['Service'] == 'lambda' else 20
+        execute_parallel_functions_in_threads(deque_tasks, max_workers, self.settings.command_timeout)
 
-        for command in dependable_commands:
-            self._collect_command_data(region, command, session, universal_services, arguments, account_dir, summary)
+    def _scan_region_data(self, region, account_dir, summary: Queue):
+        dependable_commands = []
+        non_dependable_commands = []
+        for command in self.scan_commands:
+            if "Parameters" in command:
+                dependable_commands.append(command)
+            else:
+                non_dependable_commands.append(command)
+
+        non_dependable_tasks: List[ThreadedFunctionData] = []
+        dependable_tasks: List[ThreadedFunctionData] = []
+        deque_tasks: Deque[List[ThreadedFunctionData]] = collections.deque()
+
+        for non_dependable_command in non_dependable_commands:
+            non_dependable_tasks.append(ThreadedFunctionData(
+                self._run_scan_commands,
+                (region, non_dependable_command, account_dir, summary),
+                'exception on command {}'.format(non_dependable_command)))
+
+        deque_tasks.append(non_dependable_tasks)
+
+        for dependable_command in dependable_commands:
+            dependable_tasks.append(ThreadedFunctionData(
+                self._run_scan_commands,
+                (region, dependable_command, account_dir, summary),
+                'exception on command {}'.format(dependable_command)))
+
+        deque_tasks.append(dependable_tasks)
+        execute_parallel_functions_in_threads(deque_tasks, 20)
 
     @staticmethod
     def _get_call_parameters(call_parameters: dict, parameters_def: list) -> List[dict]:
@@ -380,40 +446,23 @@ class AwsScanner(BaseCloudScanner):
         return params
 
     @staticmethod
-    def _assert_session(session):
-        sts = session.client("sts")
-        try:
-            sts.get_caller_identity()
-        except ClientError as ex:
-            if "InvalidClientTokenId" in str(ex):
-                raise DragoneyeException('sts.get_caller_identity failed with InvalidClientTokenId. '
-                                         'Likely cause is no AWS credentials are set', ex)
-            raise DragoneyeException('Unknown exception when trying to call sts.get_caller_identity: {}'.format(ex), ex)
-
-        iam = session.client("iam")
-        try:
-            iam.get_user(UserName="CloudMapper")
-        except ClientError as ex:
-            if "InvalidClientTokenId" in str(ex):
-                raise DragoneyeException(
-                    "AWS doesn't allow you to make IAM calls from a session without MFA, and the collect command gathers IAM data.  "
-                    "Please use MFA or don't use a session. With aws-vault, specify `--no-session` on your `exec`.", ex)
-            if "NoSuchEntity" in str(ex):
-                # Ignore, we're just testing that our credentials work
-                pass
-            else:
-                raise DragoneyeException('Ensure your credentials are valid', ex)
-        except NoCredentialsError as ex:
-            raise DragoneyeException("No AWS credentials configured.", ex)
-
-    @staticmethod
-    def _fill_simple_params(param_groups, name, value):
+    def _fill_simple_params(param_groups, name, value, parameter: dict):
         if not param_groups:
             param_groups = [{name: value}]
             return param_groups
         else:
+            additional_param_group: List[dict] = []
             for param_group in param_groups:
-                param_group[name] = value
+                if "Values" in parameter:
+                    for val in value:
+                        param: dict = param_group.copy()
+                        param[name] = val
+                        additional_param_group.append(param)
+                else:
+                    param_group[name] = value
+            if additional_param_group:
+                param_groups.clear()
+                param_groups.extend(additional_param_group)
             return param_groups
 
     @staticmethod
@@ -436,19 +485,43 @@ class AwsScanner(BaseCloudScanner):
                 for val in values:
                     param_groups.append({name: val})
                 return param_groups
-        cached_values = {}
+
         result_param_groups = []
         for param_group in param_groups:
             real_value = value
             for key in depends_on_keys:
                 real_value = real_value.replace(f'{{{{{key}}}}}', param_group[key])
-            cached_values[real_value] = cached_values.get(real_value, get_dynamic_values_from_files(real_value, region_account_dir))
+            dynamic_params_list: list = get_dynamic_values_from_files(real_value, region_account_dir)
             if group:
-                param_group[name] = cached_values[real_value]
+                param_group[name] = dynamic_params_list
                 result_param_groups.append(param_group)
             else:
-                for cached_value in cached_values[real_value]:
+                for cached_value in dynamic_params_list:
                     clone_param_group = copy.deepcopy(param_group)
                     clone_param_group[name] = cached_value
                     result_param_groups.append(clone_param_group)
         return result_param_groups
+
+    def _should_run_command_on_region(self, runner: dict, region_dict: dict) -> bool:
+        if runner["Service"] in self.universal_services:
+            if region_dict["RegionName"] != self.default_region:
+                return False
+        elif runner["Service"] != 'eks' and region_dict["RegionName"] not in self.session.get_available_regions(runner["Service"]):
+            logger.info("Skipping region {}, as {} does not exist there"
+                        .format(region_dict["RegionName"], runner["Service"]))
+            return False
+        return True
+
+    def _get_parameter_group(self, runner, account_dir, region, parameter_keys: set):
+        param_groups = []
+        for parameter in runner.get("Parameters", []):
+            name = parameter["Name"]
+            value = parameter.get("Value") or parameter.get("Values")
+            is_dynamic = "|" in value
+            parameter_keys.add(name)
+            if not is_dynamic:
+                param_groups = self._fill_simple_params(param_groups, name, value, parameter)
+            else:
+                group = parameter.get("Group", False)
+                param_groups = self._fill_dynamic_params(param_groups, name, value, group, account_dir, region)
+        return param_groups

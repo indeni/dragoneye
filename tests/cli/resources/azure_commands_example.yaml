@@ -1,0 +1,2 @@
+- Request: https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines?api-version=2020-12-01
+  Name: virtual-machines

@@ -28,6 +28,7 @@ pip install .
 
 ## Programmatic Usage
 Create an instance of one of the CollectRequest classes, such as AwsAccessKeyCollectRequest, AwsAssumeRoleCollectRequest, AzureCollectRequest and call the `collect` function. For example:
+
 ```python
 from dragoneye import AwsScanner, AwsCloudScanSettings, AzureScanner, AzureCloudScanSettings, AwsSessionFactory, AzureAuthorizer
 
@@ -52,11 +53,13 @@ session = AwsSessionFactory.get_session_using_assume_role(external_id='...',
 aws_scan_output_directory = AwsScanner(session, aws_settings).scan()
 
 ### Azure ###
+
 azure_settings = AzureCloudScanSettings(
     commands_path='/Users/dev/python/dragoneye/azure_commands_example.yaml',
     subscription_id='...',
     account_name='my-account'
 )
+
 token = AzureAuthorizer.get_authorization_token(
     tenant_id='...',
     client_id='...',

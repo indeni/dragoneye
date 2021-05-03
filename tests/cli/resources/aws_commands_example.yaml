@@ -1,0 +1,2 @@
+- Service: ec2
+  Request: describe-vpcs

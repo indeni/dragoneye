@@ -1,0 +1,12 @@
+{
+  "value": [
+    {
+      "name": "first item",
+      "multival": [1, 2, 3]
+    },
+    {
+      "name": "second item",
+      "multival": [11, 22, 33]
+    }
+  ]
+}

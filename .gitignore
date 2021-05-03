@@ -129,4 +129,4 @@ dmypy.json
 .pyre/
 .idea
 
-dragoneye/account-data
+*/account-data

@@ -3,48 +3,48 @@ from typing import Optional
 import boto3
 from botocore.exceptions import ClientError
 
-from dragoneye.cloud_scanner.aws.aws_scan_request import AwsCredentials
+from dragoneye.utils.app_logger import logger
 from dragoneye.dragoneye_exception import DragoneyeException
 
 
 class AwsSessionFactory:
     @staticmethod
-    def get_session(credentials: AwsCredentials,
-                    region: Optional[str] = None):
-        if credentials.account_id and credentials.role_name and credentials.external_id:
-            # use assume rule
-            session = AwsSessionFactory._get_session_using_assume_role(credentials.account_id,
-                                                                       credentials.role_name,
-                                                                       credentials.external_id,
-                                                                       credentials.session_duration,
-                                                                       region)
+    def get_session(profile_name: Optional[str] = None, region: Optional[str] = None):
+        start_msg = 'Will try to create a session'
+        session_data = {}
+        if region:
+            session_data["region_name"] = region
+        if profile_name:
+            session_data["profile_name"] = profile_name
+            start_msg = f'{start_msg} using profile {profile_name}'
         else:
-            session_data = {}
-            if region:
-                session_data["region_name"] = region
-            if credentials.profile_name:
-                session_data["profile_name"] = credentials.profile_name
-            session = boto3.Session(**session_data)
+            start_msg = f'{start_msg} using AWS auth-chain'
+        logger.info(f'{start_msg}...')
+        session = boto3.Session(**session_data)
         AwsSessionFactory.test_connectivity(session)
+        logger.info('Session was created successfully')
         return session
 
     @staticmethod
-    def _get_session_using_assume_role(account_id, role_name, external_id, session_duration, region):
-        role_arn = "arn:aws:iam::" + account_id + ":role/" + role_name
+    def get_session_using_assume_role(role_arn: str, external_id: str, region: Optional[str] = None, session_duration: int = 3600):
         role_session_name = "DragoneyeSession"
-        # TODO: replace with logger
-        print('will try to assume role using ARN: {} and external id {} for account {}'
-              .format(role_arn, external_id, account_id))
+        logger.info('Will try to assume role using ARN: {} and external id {}...'.format(role_arn, external_id))
         client = boto3.client('sts')
         response = client.assume_role(RoleArn=role_arn,
                                       RoleSessionName=role_session_name,
                                       DurationSeconds=session_duration,
                                       ExternalId=external_id)
         credentials = response['Credentials']
-        session = boto3.Session(aws_access_key_id=credentials['AccessKeyId'],
-                                aws_secret_access_key=credentials['SecretAccessKey'],
-                                aws_session_token=credentials['SessionToken'],
-                                region_name=region)
+        session_data = {
+            "aws_access_key_id": credentials['AccessKeyId'],
+            "aws_secret_access_key": credentials['SecretAccessKey'],
+            "aws_session_token": credentials['SessionToken']
+        }
+        if region:
+            session_data['region_name'] = region
+        session = boto3.Session(**session_data)
+        AwsSessionFactory.test_connectivity(session)
+        logger.info('Session was created successfully')
         return session
 
     @staticmethod
