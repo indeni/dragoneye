@@ -6,6 +6,7 @@ import os
 import re
 import json
 import time
+from functools import lru_cache
 from queue import Queue
 from typing import List, Dict, Optional, Deque
 
@@ -43,6 +44,8 @@ class AwsScanner(BaseCloudScanner):
         if self.default_region is None:
             raise ValueError('Default region cannot be empty. '
                              'You must specify the default region or set the AWS_DEFAULT_REGION environment variable')
+        self.handler_config = Config(retries={'max_attempts': self.settings.max_attempts, 'mode': 'standard'},
+                                     max_pool_connections=self.settings.max_pool_connections)
         logging.getLogger("botocore").setLevel(logging.WARN)
 
     @elapsed_time('Scanning AWS live environment took {} seconds')
@@ -343,8 +346,7 @@ class AwsScanner(BaseCloudScanner):
             return
         handler = self.session.client(
             runner["Service"], region_name=region["RegionName"],
-            config=Config(retries={'max_attempts': self.settings.max_attempts, 'mode': 'standard'},
-                          max_pool_connections=self.settings.max_pool_connections)
+            config=self.handler_config
         )
 
         filepath = os.path.join(account_dir, region["RegionName"], f'{runner["Service"]}-{runner["Request"]}')
@@ -506,7 +508,7 @@ class AwsScanner(BaseCloudScanner):
         if runner["Service"] in self.universal_services:
             if region_dict["RegionName"] != self.default_region:
                 return False
-        elif runner["Service"] != 'eks' and region_dict["RegionName"] not in self.session.get_available_regions(runner["Service"]):
+        elif runner["Service"] != 'eks' and region_dict["RegionName"] not in self._get_available_regions(runner["Service"]):
             logger.info("Skipping region {}, as {} does not exist there"
                         .format(region_dict["RegionName"], runner["Service"]))
             return False
@@ -525,3 +527,7 @@ class AwsScanner(BaseCloudScanner):
                 group = parameter.get("Group", False)
                 param_groups = self._fill_dynamic_params(param_groups, name, value, group, account_dir, region)
         return param_groups
+
+    @lru_cache(maxsize=None)
+    def _get_available_regions(self, service: str):
+        return self.session.get_available_regions(service)
