@@ -71,7 +71,7 @@ class AzureScanner(BaseCloudScanner):
             output_file = self._get_result_file_path(account_data_dir, scan_command['Name'])
             if os.path.isfile(output_file):
                 # Data already scanned, so skip
-                logger.warning('  Response already present at {}'.format(output_file))
+                logger.warning('Response already present at {}'.format(output_file))
                 return
 
             request = scan_command['Request']
@@ -80,11 +80,11 @@ class AzureScanner(BaseCloudScanner):
             results = AzureScanner._get_results(url, headers, parameters, account_data_dir, resource_groups)
             self._save_result(results, output_file)
         except Exception as ex:
-            logger.exception('exception on command {}'.format(scan_command), exc_info=ex)
+            logger.exception('Exception occurred: {} while running command {}'.format(ex, scan_command))
 
     def _save_result(self, result: dict, filepath: str) -> None:
         self._add_resource_group(result)
-        with open(filepath, "w+") as file:
+        with open(filepath, "w") as file:
             json.dump(result, file, indent=4, default=custom_serializer)
 
     @staticmethod

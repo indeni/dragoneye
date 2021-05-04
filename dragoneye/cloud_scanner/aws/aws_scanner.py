@@ -161,7 +161,7 @@ class AwsScanner(BaseCloudScanner):
         # https://github.com/Netflix-Skunkworks/cloudaux/blob/master/cloudaux/aws/decorators.py
         if os.path.isfile(output_file):
             # Data already scanned, so skip
-            logger.warning("  Response already present at {}".format(output_file))
+            logger.warning("Response already present at {}".format(output_file))
             return
 
         call_summary = {

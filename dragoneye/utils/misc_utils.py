@@ -63,7 +63,7 @@ def _on_backoff_giveup(details: dict) -> None:
     logger.info('Given up on request for {args[0]}'.format(**details))
 
 
-@backoff.on_exception(backoff.expo, requests.RequestException, 10, 600)
+@backoff.on_exception(backoff.expo, requests.RequestException, 3, 600)
 @backoff.on_predicate(backoff.expo, lambda response: response.status_code != 200, 3, 600,
                       on_success=_on_backoff_success,
                       on_backoff=_on_backoff_predicate,
