@@ -5,7 +5,7 @@ import uuid
 from unittest.mock import patch
 
 from click.testing import CliRunner
-from mockito import when, mock
+from mockito import when, unstub, mock
 
 import dragoneye
 from dragoneye import AzureAuthorizer, AwsSessionFactory
@@ -23,6 +23,9 @@ class TestScan(unittest.TestCase):
             shutil.rmtree('./account-data')
         except Exception:
             pass
+
+    def tearDown(self) -> None:
+        unstub()
 
     @patch.object(AzureAuthorizer, 'get_authorization_token')
     def test_azure_ok(self, mock_azure_authorizer):
