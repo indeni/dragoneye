@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 from botocore.config import Config
 
 from dragoneye.cloud_scanner.aws.aws_scan_settings import AwsCloudScanSettings
-from dragoneye.cloud_scanner.aws.boto_backoff import rate_limiter
+from dragoneye.utils.boto_backoff import rate_limiter
 from dragoneye.cloud_scanner.base_cloud_scanner import BaseCloudScanner
 from dragoneye.utils.app_logger import logger
 from dragoneye.utils.misc_utils import get_dynamic_values_from_files, custom_serializer, make_directory, init_directory, load_yaml, snakecase, \

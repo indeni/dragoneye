@@ -17,7 +17,7 @@ def rate_limiter(max_attempts=10):
                 try:
                     return func(*args, **kwargs)
                 except ClientError as ex:
-                    if ex.response['Error']['Code'] not in RATE_ERRORS or ex.response['Error']['Message'] != 'Rate exceeded':
+                    if ex.response['Error']['Code'] not in RATE_ERRORS and ex.response['Error']['Message'] != 'Rate exceeded':
                         raise ex  # Raise non-throttling errors
                     attempt += 1
                     logger.warning(f'Throttling error on operation: {ex.operation_name} on attempt #{attempt}/{max_attempts}')
