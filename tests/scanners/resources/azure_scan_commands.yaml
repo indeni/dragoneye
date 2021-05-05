@@ -1,0 +1,11 @@
+- Request: https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines?api-version=2020-12-01
+  Name: request1
+
+- Request: https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}?api-version=2020-12-01
+  Name: request2
+  Parameters:
+    - Name: vmName resourceGroupName
+      Value: request1.json|.value[] | .vmName + " " + .resourceGroup
+
+- Request: https://management.azure.com/subscriptions/{subscriptionId}/providers/Microsoft.Compute/request3?api-version=2020-12-01
+  Name: request3

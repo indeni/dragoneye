@@ -161,7 +161,7 @@ class AwsScanner(BaseCloudScanner):
         # https://github.com/Netflix-Skunkworks/cloudaux/blob/master/cloudaux/aws/decorators.py
         if os.path.isfile(output_file):
             # Data already scanned, so skip
-            logger.warning("  Response already present at {}".format(output_file))
+            logger.warning("Response already present at {}".format(output_file))
             return
 
         call_summary = {
@@ -276,7 +276,7 @@ class AwsScanner(BaseCloudScanner):
             ):
                 logger.warning(f"  - {str(ex)}")
             else:
-                logger.warning(f"ClientError {retries}: {ex}")
+                logger.warning(f"ClientError {ex}")
                 call_summary["exception"] = ex
         except EndpointConnectionError as ex:
             logger.warning("EndpointConnectionError: {}".format(ex))
@@ -471,7 +471,7 @@ class AwsScanner(BaseCloudScanner):
                              group: bool,
                              account_dir: str,
                              region: Dict[str, str]) -> List[dict]:
-        depends_on_keys = re.findall(r'\{\{(.*)\}\}', value) or []
+        depends_on_keys = re.findall(r'{{([^|]*)}}', value) or []
         region_account_dir = os.path.join(account_dir, region['RegionName'])
         if not param_groups and depends_on_keys:
             return param_groups

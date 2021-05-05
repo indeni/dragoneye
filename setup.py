@@ -1,6 +1,7 @@
 import sys
 
 from setuptools import setup, find_packages
+from dragoneye.version import __version__
 
 with open('requirements.txt') as requirements_file:
     requirements = requirements_file.read().splitlines()
@@ -8,7 +9,7 @@ with open('requirements.txt') as requirements_file:
 project_name = 'dragoneye'
 with open("README.md", "r") as fh:
     long_description = fh.read()
-version = '0.0.1'
+version = __version__
 
 if "--version" in sys.argv:
     index = sys.argv.index('--version')

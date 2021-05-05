@@ -3,6 +3,7 @@ import os
 import click
 from click_aliases import ClickAliasedGroup
 
+from dragoneye.version import __version__
 from dragoneye.cloud_scanner.aws.aws_scanner import AwsScanner
 from dragoneye.cloud_scanner.aws.aws_session_factory import AwsSessionFactory
 from dragoneye.cloud_scanner.azure.azure_scanner import AzureScanner
@@ -13,9 +14,9 @@ from dragoneye.utils.value_validator import validate_uuid, validate_path
 
 
 @click.group(name='scan',
-             short_help='Scan cloud account.',
-             help='Scan cloud account. Currently supported: AWS, Azure',
+             help='Execute data-fetching API commands on a cloud account at a large scale quickly. Currently supported: AWS, Azure',
              cls=ClickAliasedGroup)
+@click.version_option(__version__)
 def scan_cli():
     pass
 
@@ -29,9 +30,12 @@ def safe_cli_entry_point():
 
 @scan_cli.command(name='azure',
                   short_help='Scan an Azure cloud account',
-                  help='Scan an Azure cloud account.')
+                  help='Scan an Azure cloud account. '
+                       '\n\nSCAN_COMMANDS_PATH: The file path to the yaml file that contains all the scan commands to run')
+@click.argument('scan-commands-path',
+                type=click.STRING)
 @click.option('--cloud-account-name', '-n',
-              help='The name of your cloud account',
+              help='The name of your cloud account, the default value is \'default\'',
               type=click.STRING,
               default='default')
 @click.option('--subscription-id', '-i',
@@ -48,10 +52,6 @@ def safe_cli_entry_point():
               required=True)
 @click.option('--client-secret', '-s',
               help='The client secret created in Azure connect to cloudrail',
-              type=click.STRING,
-              required=True)
-@click.option('--scan-commands-path',
-              help='The file path to the yaml file that contains all the scan commands to run',
               type=click.STRING,
               required=True)
 @click.option("--clean",
@@ -84,9 +84,11 @@ def azure(cloud_account_name: str,
 
 @scan_cli.command(name='aws',
                   short_help='Scan an AWS cloud account',
-                  help='Scan an AWS cloud account.')
+                  help='Scan an AWS cloud account. \n\nSCAN_COMMANDS_PATH: The file path to the yaml file that contains all the scan commands to run')
+@click.argument('scan-commands-path',
+                type=click.STRING)
 @click.option('--cloud-account-name', '-n',
-              help='The name of your cloud account',
+              help='The name of your cloud account, the default value is \'default\'',
               type=click.STRING,
               default='default')
 @click.option('--profile',
@@ -96,10 +98,6 @@ def azure(cloud_account_name: str,
               help="Filter and query AWS only for the given regions (comma separated)",
               type=click.STRING,
               default='')
-@click.option('--scan-commands-path',
-              help='The file path to the yaml file that contains all the scan commands to run',
-              type=click.STRING,
-              required=True)
 @click.option("--clean",
               help="Remove any existing data for the account before gathering",
               is_flag=True,

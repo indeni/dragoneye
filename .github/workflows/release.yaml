@@ -1,32 +1,52 @@
 name: Create a new release
 
-on:
-  workflow_dispatch:
-    inputs:
-      tagVersion:
-        description: 'Tag version'
-        required: true
+on: [workflow_dispatch]
 
 jobs:
-  create-new-release:
+  release-new-version:
+    strategy:
+      matrix:
+        python-version: [ 3.9 ]
     runs-on: ubuntu-latest
     steps:
-    - name: update docs and bump version
+    - name: checkout
+      uses: actions/checkout@v2
+      with:
+        token: ${{ secrets.ALON_PAT_DRAGONEYE }}
+    - name: get new version
+      uses: anothrNick/github-tag-action@master
+      id: get_new_tag
+      env:
+        GITHUB_TOKEN: ${{ secrets.ALON_PAT_DRAGONEYE }}
+        WITH_V: true
+        DEFAULT_BUMP: patch
+        DRY_RUN: true
+    - name: Save version into env var
+      run: echo "RELEASE_VERSION=${{steps.get_new_tag.outputs.new_tag}}" >> $GITHUB_ENV
+    - name: Update version.py
+      run: |
+        version_file="dragoneye/version.py"
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        echo "latest tag: ${{ env.RELEASE_VERSION }}"
+        echo "__version__ = '${{ env.RELEASE_VERSION }}'" > $version_file
+        git commit --reuse-message=HEAD $version_file || echo "No changes to commit"
+        git push origin
+    - name: Bump version and push tag
+      uses: anothrNick/github-tag-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.ALON_PAT_DRAGONEYE }}
+        WITH_V: true
+        DEFAULT_BUMP: patch
+
+    # create-new-release:
+    - name: Create github release
       env:
         GITHUB_TOKEN: ${{ secrets.ALON_PAT_DRAGONEYE }}
       run: |
-        gh release create ${{ github.event.inputs.tagVersion }}  -t ${{ github.event.inputs.tagVersion }} --repo indeni/dragoneye
-  release-packadge-to-pipy:
-    needs: [create-new-release]
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.9]
+        gh release create ${{ env.RELEASE_VERSION }}  -t ${{ env.RELEASE_VERSION }} --repo indeni/dragoneye
 
-    steps:
-    - uses: actions/checkout@v2
-      with:
-        ref: ${{ github.event.inputs.tagVersion }}
+    # release-package-to-PyPi:
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
       with:
@@ -38,5 +58,5 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Upload pip package to PyPi
       run: |
-        python setup.py sdist bdist_wheel --version ${{ github.event.inputs.tagVersion }}
+        python setup.py sdist bdist_wheel --version ${{ env.RELEASE_VERSION }}
         twine upload dist/*  -u __token__ -p ${{ secrets.PYPI_API_TOKEN }}

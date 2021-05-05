@@ -5,7 +5,7 @@ import uuid
 from unittest.mock import patch
 
 from click.testing import CliRunner
-from mockito import when, mock
+from mockito import when, unstub, mock
 
 import dragoneye
 from dragoneye import AzureAuthorizer, AwsSessionFactory
@@ -24,6 +24,9 @@ class TestScan(unittest.TestCase):
         except Exception:
             pass
 
+    def tearDown(self) -> None:
+        unstub()
+
     @patch.object(AzureAuthorizer, 'get_authorization_token')
     def test_azure_ok(self, mock_azure_authorizer):
         # Arrange
@@ -31,7 +34,7 @@ class TestScan(unittest.TestCase):
         when(dragoneye.cloud_scanner.azure.azure_scanner.AzureScanner).scan().thenReturn('/path/to/results')
         # Act
         result = self.runner.invoke(scan_cli, ['azure',
-                                               '--scan-commands-path', os.path.join(self._current_dir(), 'resources', 'azure_commands_example.yaml'),
+                                               os.path.join(self._current_dir(), 'resources', 'azure_commands_example.yaml'),
                                                '--subscription-id', str(uuid.uuid4()),
                                                '--tenant-id', str(uuid.uuid4()),
                                                '--client-id', str(uuid.uuid4()),
@@ -43,7 +46,7 @@ class TestScan(unittest.TestCase):
     def test_azure_invalid_subscription_id(self):
         # Act
         result = self.runner.invoke(scan_cli, ['azure',
-                                               '--scan-commands-path', os.path.join(self._current_dir(), 'resources', 'azure_commands_example.yaml'),
+                                               os.path.join(self._current_dir(), 'resources', 'azure_commands_example.yaml'),
                                                '--subscription-id', 'non-uuid-value',
                                                '--tenant-id', str(uuid.uuid4()),
                                                '--client-id', str(uuid.uuid4()),
@@ -55,7 +58,7 @@ class TestScan(unittest.TestCase):
     def test_azure_invalid_tenant_id(self):
         # Act
         result = self.runner.invoke(scan_cli, ['azure',
-                                               '--scan-commands-path', os.path.join(self._current_dir(), 'resources', 'azure_commands_example.yaml'),
+                                               os.path.join(self._current_dir(), 'resources', 'azure_commands_example.yaml'),
                                                '--subscription-id', str(uuid.uuid4()),
                                                '--tenant-id', 'non-uuid-value',
                                                '--client-id', str(uuid.uuid4()),
@@ -67,7 +70,7 @@ class TestScan(unittest.TestCase):
     def test_azure_invalid_client_id(self):
         # Act
         result = self.runner.invoke(scan_cli, ['azure',
-                                               '--scan-commands-path', os.path.join(self._current_dir(), 'resources', 'azure_commands_example.yaml'),
+                                               os.path.join(self._current_dir(), 'resources', 'azure_commands_example.yaml'),
                                                '--subscription-id', str(uuid.uuid4()),
                                                '--tenant-id', str(uuid.uuid4()),
                                                '--client-id', 'non-uuid-value',
@@ -79,7 +82,7 @@ class TestScan(unittest.TestCase):
     def test_azure_invalid_scan_commands_path(self):
         # Act
         result = self.runner.invoke(scan_cli, ['azure',
-                                               '--scan-commands-path', os.path.join(self._current_dir(), 'non-existing-file.yaml'),
+                                               os.path.join(self._current_dir(), 'non-existing-file.yaml'),
                                                '--subscription-id', str(uuid.uuid4()),
                                                '--tenant-id', str(uuid.uuid4()),
                                                '--client-id', str(uuid.uuid4()),
@@ -94,8 +97,7 @@ class TestScan(unittest.TestCase):
         mock_aws_session_factory.return_value = mock({'region_name': 'us-east-1'})
         when(dragoneye.cloud_scanner.aws.aws_scanner.AwsScanner).scan().thenReturn('/path/to/results')
         # Act
-        result = self.runner.invoke(scan_cli, ['aws',
-                                               '--scan-commands-path', os.path.join(self._current_dir(), 'resources', 'aws_commands_example.yaml')])
+        result = self.runner.invoke(scan_cli, ['aws', os.path.join(self._current_dir(), 'resources', 'aws_commands_example.yaml')])
         # Assert
         self.assertEqual(result.exit_code, 0)
         self.assertTrue('/path/to/results' in result.output)
@@ -106,8 +108,7 @@ class TestScan(unittest.TestCase):
         mock_aws_session_factory.return_value = mock({'region_name': 'us-east-1'})
         when(dragoneye.cloud_scanner.aws.aws_scanner.AwsScanner).scan().thenReturn('/path/to/results')
         # Act
-        result = self.runner.invoke(scan_cli, ['aws',
-                                               '--scan-commands-path', os.path.join(self._current_dir(), 'resources', 'aws_commands_example.yaml'),
+        result = self.runner.invoke(scan_cli, ['aws', os.path.join(self._current_dir(), 'resources', 'aws_commands_example.yaml'),
                                                '--profile', 'profile-name'])
         # Assert
         self.assertEqual(result.exit_code, 0)
@@ -115,8 +116,7 @@ class TestScan(unittest.TestCase):
 
     def test_aws_invalid_scan_commands_path(self):
         # Act
-        result = self.runner.invoke(scan_cli, ['aws',
-                                               '--scan-commands-path', os.path.join(self._current_dir(), 'non-existing-file.yaml')])
+        result = self.runner.invoke(scan_cli, ['aws', os.path.join(self._current_dir(), 'non-existing-file.yaml')])
         # Assert
         self.assertEqual(result.exit_code, 1)
         self._assert_exception(result.exception, ValueError, 'Path does not exist')
