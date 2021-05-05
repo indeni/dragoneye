@@ -181,7 +181,7 @@ class AwsScanner(BaseCloudScanner):
     @staticmethod
     def _get_data(output_file, handler, method_to_call, parameters, checks, call_summary):
         logger.info("  Making call for {}".format(output_file))
-        data = None
+        data: dict = {}
         try:
             for retries in range(MAX_RETRIES):
                 data = AwsScanner._call_boto_function(output_file, handler, method_to_call, parameters)
@@ -274,7 +274,7 @@ class AwsScanner(BaseCloudScanner):
             ):
                 logger.warning(f"  - {str(ex)}")
             else:
-                logger.warning(f"ClientError {retries}: {ex}")
+                logger.warning(f"ClientError {ex}")
                 call_summary["exception"] = ex
         except EndpointConnectionError as ex:
             logger.warning("EndpointConnectionError: {}".format(ex))
@@ -472,7 +472,7 @@ class AwsScanner(BaseCloudScanner):
                              group: bool,
                              account_dir: str,
                              region: Dict[str, str]) -> List[dict]:
-        depends_on_keys = re.findall(r'\{\{(.*)\}\}', value) or []
+        depends_on_keys = re.findall(r'{{([^|]*)}}', value) or []
         region_account_dir = os.path.join(account_dir, region['RegionName'])
         if not param_groups and depends_on_keys:
             return param_groups

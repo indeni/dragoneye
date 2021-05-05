@@ -460,3 +460,22 @@
 
 - Service: ssm
   Request: describe-parameters
+
+- Service: apigateway
+  Request: get-rest-apis
+
+- Service: apigateway
+  Request: get-resources
+  Parameters:
+    - Name: restApiId
+      Value: apigateway-get-rest-apis.json|.items[]?|.id
+
+- Service: apigateway
+  Request: get-method
+  Parameters:
+    - Name: restApiId
+      Value: apigateway-get-rest-apis.json|.items[]?|.id
+    - Name: resourceId
+      Value: apigateway-get-resources/*{{restApiId}}*|.items[]?|.id
+    - Name: httpMethod
+      Value: apigateway-get-resources/*{{restApiId}}*|.items[] | select( .id == "{{resourceId}}") | select( .resourceMethods != null) | .resourceMethods | keys
