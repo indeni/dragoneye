@@ -173,7 +173,7 @@ class AwsScanner(BaseCloudScanner):
 
         params_string = '' if not parameters else ', '.join(f'{k}={v}' for k, v in parameters.items())
         function_msg = f'{call_summary["service"]}.{call_summary["action"]}({params_string})'
-        logger.info(f'Calling {function_msg}')
+        logger.info(f'Invoking {function_msg}')
         data = AwsScanner._get_data(output_file, handler, method_to_call, parameters, checks, call_summary)
         AwsScanner._remove_unused_values(data)
         AwsScanner._save_results_to_file(output_file, data)

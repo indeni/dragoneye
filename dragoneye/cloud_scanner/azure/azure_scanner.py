@@ -1,5 +1,6 @@
 import collections
 import os
+from queue import Queue
 from typing import List, Deque
 
 import json
@@ -19,6 +20,7 @@ class AzureScanner(BaseCloudScanner):
     def __init__(self, auth_header: str, settings: AzureCloudScanSettings):
         self.auth_header = auth_header
         self.settings = settings
+        self.summary = Queue()
 
     @elapsed_time('Scanning Azure live environment took {} seconds')
     def scan(self) -> str:
@@ -63,6 +65,8 @@ class AzureScanner(BaseCloudScanner):
         deque_tasks.append(dependable_tasks)
         execute_parallel_functions_in_threads(deque_tasks, 20)
 
+        self._print_summary()
+
         return os.path.abspath(os.path.join(account_data_dir, '..'))
 
     def _execute_scan_commands(self, scan_command: dict, subscription_id: str, headers: dict,
@@ -77,7 +81,7 @@ class AzureScanner(BaseCloudScanner):
             request = scan_command['Request']
             parameters = scan_command.get('Parameters', [])
             base_url = request.replace('{subscriptionId}', subscription_id)
-            results = AzureScanner._get_results(base_url, headers, parameters, account_data_dir, resource_groups)
+            results = self._get_results(base_url, headers, parameters, account_data_dir, resource_groups)
             self._save_result(results, output_file)
             for url in results['urls']:
                 logger.info(f'Results from {url} were saved to {output_file}')
@@ -121,16 +125,26 @@ class AzureScanner(BaseCloudScanner):
 
         return complete_urls
 
-    @staticmethod
-    def _get_results(base_url: str, headers: dict, parameters: List[dict], account_data_dir: str, resource_groups: List[str]) -> dict:
+    def _get_results(self, base_url: str, headers: dict, parameters: List[dict], account_data_dir: str, resource_groups: List[str]) -> dict:
         results = {'value': []}
         urls = AzureScanner._build_urls(base_url, parameters, account_data_dir, resource_groups)
         for url in urls:
             logger.info(f'Invoking {url}')
-            response = invoke_get_request(url, headers)
-            AzureScanner._concat_results(results, response)
+            call_summary = {
+                'request': url
+            }
+            response = invoke_get_request(url, headers, on_giveup=self._default_on_backoff_giveup)
+            if response.status_code == 200:
+                AzureScanner._concat_results(results, response)
+            else:
+                call_summary['error'] = json.loads(response.content.decode('utf-8'))['error']
+            self.summary.put_nowait(call_summary)
         results['urls'] = urls
         return results
+
+    @staticmethod
+    def _default_on_backoff_giveup(details: dict) -> None:
+        logger.error('Given up on request for {args[0]} after {tries} tries'.format(**details))
 
     @staticmethod
     def _concat_results(results: dict, response: Response) -> None:
@@ -143,7 +157,7 @@ class AzureScanner(BaseCloudScanner):
 
     def _get_resource_groups(self, headers: dict, subscription_id: str, account_data_dir: str) -> List[str]:
         url = f'https://management.azure.com/subscriptions/{subscription_id}/resourcegroups?api-version=2020-09-01'
-        results = AzureScanner._get_results(url, headers, [], account_data_dir, [])
+        results = self._get_results(url, headers, [], account_data_dir, [])
         output_file = self._get_result_file_path(account_data_dir, 'resource-groups')
         self._save_result(results, output_file)
         logger.info(f'Results from {url} were saved to {output_file}')
@@ -163,3 +177,24 @@ class AzureScanner(BaseCloudScanner):
     @staticmethod
     def _get_result_file_path(account_data_dir: str, filename: str):
         return os.path.join(account_data_dir, filename + '.json')
+
+    def _print_summary(self):
+        logger.info("--------------------------------------------------------------------")
+        failures = []
+        for call_summary in self.summary.queue:
+            if 'error' in call_summary:
+                failures.append(call_summary)
+
+        logger.info("Summary: {} APIs called. {} errors".format(len(self.summary.queue), len(failures)))
+        if len(failures) > 0:
+            logger.warning("Failures:")
+            for call_summary in failures:
+                error_code = call_summary['error']['code']
+                error_msg = call_summary['error']['message']
+                logger.warning(
+                    "  {}: {} - {}".format(
+                        call_summary["request"],
+                        error_code,
+                        error_msg
+                    )
+                )
