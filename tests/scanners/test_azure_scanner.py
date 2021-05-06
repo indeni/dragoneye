@@ -28,7 +28,7 @@ class TestAzureScanner(unittest.TestCase):
             should_clean_before_scan=True,
             output_path=self.temp_dir.name
         )
-        when(dragoneye.cloud_scanner.azure.azure_scanner).invoke_get_request(ANY, ANY).thenReturn(mock({'status_code': 200, 'text': '{}'}))
+        when(dragoneye.cloud_scanner.azure.azure_scanner).invoke_get_request(ANY, ANY, on_giveup=ANY).thenReturn(mock({'status_code': 200, 'text': '{}'}))
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
