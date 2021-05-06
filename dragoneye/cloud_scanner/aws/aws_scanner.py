@@ -273,6 +273,10 @@ class AwsScanner(BaseCloudScanner):
                     "NoSuchAccessPointPolicy" in str(ex)
             ):
                 logger.warning(f"  - {str(ex)}")
+            elif (
+                    "PolicyNotFound" in str(ex)
+            ):
+                logger.warning(f"  - {str(ex)}")
             else:
                 logger.warning(f"ClientError {ex}")
                 call_summary["exception"] = ex
@@ -280,8 +284,11 @@ class AwsScanner(BaseCloudScanner):
             logger.warning("EndpointConnectionError: {}".format(ex))
             call_summary["exception"] = ex
         except Exception as ex:
-            logger.warning("Exception: {}".format(ex))
-            call_summary["exception"] = ex
+            if "Parameter validation failed" in str(ex):
+                logger.warning(f"  - {str(ex)}")
+            else:
+                logger.warning("Exception: {}".format(ex))
+                call_summary["exception"] = ex
 
         return data
 
