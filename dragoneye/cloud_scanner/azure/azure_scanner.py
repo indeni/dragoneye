@@ -138,6 +138,7 @@ class AzureScanner(BaseCloudScanner):
                 AzureScanner._concat_results(results, response)
             else:
                 call_summary['error'] = json.loads(response.content.decode('utf-8'))['error']
+                logger.error(self._parse_error(call_summary))
             self.summary.put_nowait(call_summary)
         results['urls'] = urls
         return results
@@ -189,12 +190,10 @@ class AzureScanner(BaseCloudScanner):
         if len(failures) > 0:
             logger.warning("Failures:")
             for call_summary in failures:
-                error_code = call_summary['error']['code']
-                error_msg = call_summary['error']['message']
-                logger.warning(
-                    "  {}: {} - {}".format(
-                        call_summary["request"],
-                        error_code,
-                        error_msg
-                    )
-                )
+                logger.warning(f"  {self._parse_error(call_summary)}")
+
+    @staticmethod
+    def _parse_error(call_summary: dict):
+        error_code = call_summary['error']['code']
+        error_msg = call_summary['error']['message']
+        return f'{call_summary["request"]}: {error_code} - {error_msg}'
