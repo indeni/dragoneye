@@ -1,0 +1,16 @@
+- Service: service1
+  Request: request1
+
+- Service: service1
+  Request: request2
+  Parameters:
+  - Name: Key1
+    Value: service1-request1.json|.Items[].Key1
+
+- Service: service2
+  Request: request3
+  Parameters:
+  - Name: Key1
+    Value: service1-request1.json|.Items[].Key1
+  - Name: Key2
+    Value: service1-request1.json|.Items[].Key2
