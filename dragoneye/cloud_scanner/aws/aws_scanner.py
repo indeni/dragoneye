@@ -14,6 +14,7 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 from botocore.config import Config
 
 from dragoneye.cloud_scanner.aws.aws_scan_settings import AwsCloudScanSettings
+from dragoneye.utils.boto_backoff import rate_limiter
 from dragoneye.cloud_scanner.base_cloud_scanner import BaseCloudScanner
 from dragoneye.utils.app_logger import logger
 from dragoneye.utils.misc_utils import get_dynamic_values_from_files, custom_serializer, make_directory, init_directory, load_yaml, snakecase, \
@@ -286,6 +287,7 @@ class AwsScanner(BaseCloudScanner):
         return data
 
     @staticmethod
+    @rate_limiter()
     def _call_boto_function(output_file, handler, method_to_call, parameters):
         data = {}
         if handler.can_paginate(method_to_call):
@@ -388,8 +390,7 @@ class AwsScanner(BaseCloudScanner):
 
         deque_tasks: Deque[List[ThreadedFunctionData]] = collections.deque()
         deque_tasks.append(tasks)
-        max_workers = 10 if runner['Service'] == 'lambda' else 20
-        execute_parallel_functions_in_threads(deque_tasks, max_workers, self.settings.command_timeout)
+        execute_parallel_functions_in_threads(deque_tasks, 20, self.settings.command_timeout)
 
     def _scan_region_data(self, region, account_dir, summary: Queue):
         dependable_commands = []

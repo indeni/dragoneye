@@ -1,3 +1,4 @@
+import functools
 import glob
 import json
 import os
@@ -16,6 +17,7 @@ from dragoneye.utils.app_logger import logger
 
 def elapsed_time(message=None):
     def _elapsed_time(function):
+        @functools.wraps(function)
         def elapsed_wrapper(*arguments):
             start = datetime.now()
             return_val = function(*arguments)
