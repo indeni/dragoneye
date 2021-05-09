@@ -158,8 +158,9 @@ class TestAwsScanner(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(account_data_dir, self.regions[0], 'service1-request1.json')))
         self.assertFalse(os.path.isfile(os.path.join(account_data_dir, self.regions[1], 'service1-request1.json')))
 
+    @patch('dragoneye.cloud_scanner.aws.aws_scanner.time.sleep')
     @patch('logging.Logger.warning')
-    def test_scan_command_check_fails(self, patched_logger):
+    def test_scan_command_check_fails(self, patched_logger, unused_patch_sleep):
         # Arrange
         self.aws_settings.regions_filter = self.regions[0]
         scan_command = [{

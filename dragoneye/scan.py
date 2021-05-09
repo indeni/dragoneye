@@ -43,17 +43,14 @@ def safe_cli_entry_point():
               type=click.STRING,
               required=True)
 @click.option('--tenant-id', '-t',
-              help='ID of Azure tenant of this subscription',
-              type=click.STRING,
-              required=True)
+              help='ID of Azure tenant of this subscription. Specify it only if you authenticate with client id/secret',
+              type=click.STRING)
 @click.option('--client-id', '-c',
-              help='The client id created in Azure to connect to cloudrail',
-              type=click.STRING,
-              required=True)
+              help='The client id of an application created in Azure. If not specified, will use credentials from `az login`',
+              type=click.STRING)
 @click.option('--client-secret', '-s',
-              help='The client secret created in Azure connect to cloudrail',
-              type=click.STRING,
-              required=True)
+              help='The client secret of an application created in Azure. If not specified, will use credentials from `az login`',
+              type=click.STRING)
 @click.option("--clean",
               help="Remove any existing data for the account before gathering",
               is_flag=True,
@@ -66,8 +63,6 @@ def azure(cloud_account_name: str,
           subscription_id: str, client_id: str, client_secret: str, tenant_id: str,
           scan_commands_path, clean, output_path):
     validate_uuid(subscription_id, 'Invalid subscription id')
-    validate_uuid(tenant_id, 'Invalid tenant id')
-    validate_uuid(client_id, 'Invalid client id')
     validate_path(scan_commands_path)
 
     azure_scan_settings = AzureCloudScanSettings(

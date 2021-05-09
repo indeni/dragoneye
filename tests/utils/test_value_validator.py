@@ -2,7 +2,7 @@ import os
 import unittest
 import uuid
 
-from dragoneye.utils.value_validator import validate_uuid, validate_path
+from dragoneye.utils.value_validator import validate_uuid, validate_path, validate_not_empty
 
 
 class TestValueValidator(unittest.TestCase):
@@ -62,3 +62,12 @@ class TestValueValidator(unittest.TestCase):
         for path in (path1, path2, path3, path4, path5, path6):
             with self.assertRaises(ValueError):
                 validate_path(path)
+
+    def test_validate_not_empty(self):
+        with self.assertRaises(ValueError):
+            validate_not_empty('')
+
+        with self.assertRaises(ValueError):
+            validate_not_empty(None)
+
+        validate_not_empty('non empty val')
