@@ -109,8 +109,6 @@ class AzureScanner(BaseCloudScanner):
                         modified_url = modified_url.replace('{{{0}}}'.format(param), value)
 
                     urls_with_params.append(modified_url)
-                if not param_real_values:
-                    logger.warning(f'Could not fill parameter values for {_url}')
         else:
             urls_with_params.append(_url)
 
