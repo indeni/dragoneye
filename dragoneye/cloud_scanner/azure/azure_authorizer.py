@@ -57,14 +57,15 @@ class AzureAuthorizer:
 
     @staticmethod
     def _get_token_from_az_cli() -> str:
-        process = subprocess.Popen(['az', 'account', 'get-access-token'],
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE)
-        stdout, stderr = process.communicate()
-        if stderr:
-            raise DragoneyeException('Failed to authenticate.\n'
-                                     f'Reason: {stderr.decode(sys.stderr.encoding)}')
-        output = stdout.decode(sys.stdout.encoding)
-        ind = output.rindex('}') + 1
-        output = output[:ind]
-        return json.loads(output)['accessToken']
+        with subprocess.Popen(['az', 'account', 'get-access-token'],
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE) as process:
+            stdout, stderr = process.communicate()
+            process.__enter__()
+            if stderr:
+                raise DragoneyeException('Failed to authenticate.\n'
+                                         f'Reason: {stderr.decode(sys.stderr.encoding)}')
+            output = stdout.decode(sys.stdout.encoding)
+            ind = output.rindex('}') + 1
+            output = output[:ind]
+            return json.loads(output)['accessToken']

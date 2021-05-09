@@ -43,6 +43,8 @@ class TestAzureAuthorizer(unittest.TestCase):
     def test_get_authorization_token_from_cli_ok(self):
         # Arrange
         process_mock = mock()
+        when(process_mock).__enter__().thenReturn(process_mock)
+        when(process_mock).__exit__().thenReturn(process_mock)
         when(subprocess).Popen(ANY, stdout=ANY, stderr=ANY).thenReturn(process_mock)
         when(process_mock).communicate().thenReturn((b'{ "accessToken": "the_token" }', b''))
         # Act
@@ -54,6 +56,8 @@ class TestAzureAuthorizer(unittest.TestCase):
         # Arrange
         error_message = b'An error occurred'
         process_mock = mock()
+        when(process_mock).__enter__().thenReturn(process_mock)
+        when(process_mock).__exit__().thenReturn(process_mock)
         when(subprocess).Popen(ANY, stdout=ANY, stderr=ANY).thenReturn(process_mock)
         when(process_mock).communicate().thenReturn((b'', error_message))
         # Act / Assert
