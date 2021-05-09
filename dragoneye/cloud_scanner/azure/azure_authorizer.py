@@ -23,7 +23,6 @@ class AzureAuthorizer:
         Otherwise, it will attempt to generate a token from your CLI credentials, using
         `az account get-access-token <https://docs.microsoft.com/en-us/cli/azure/account?view=azure-cli-latest#az_account_get_access_token>`__
         """
-        logger.info('Will try to generate JWT bearer token...')
         if not (client_id and client_secret and tenant_id):
             token = AzureAuthorizer._get_token_from_az_cli()
         else:
@@ -37,6 +36,7 @@ class AzureAuthorizer:
         validate_uuid(tenant_id, 'Invalid tenant id')
         validate_uuid(client_id, 'Invalid client id')
 
+        logger.info('Will try to generate JWT bearer token using provided client id/secret...')
         response = requests.post(
             url=f'https://login.microsoftonline.com/{tenant_id}/oauth2/token',
             data={
@@ -57,6 +57,7 @@ class AzureAuthorizer:
 
     @staticmethod
     def _get_token_from_az_cli() -> str:
+        logger.info('Will try to generate JWT bearer token from currently logged in azure user...')
         with subprocess.Popen(['az', 'account', 'get-access-token'],
                               stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE) as process:
