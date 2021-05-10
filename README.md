@@ -38,15 +38,15 @@ aws_settings = AwsCloudScanSettings(
     account_name='default', default_region='us-east-1', regions_filter=['us-east-1']
 )
 
-# Using environment variables
+#### Using environment variables
 session = AwsSessionFactory.get_session(profile_name=None, region='us-east-1')  # Raises exception if authentication is unsuccessful
 aws_scan_output_directory = AwsScanner(session, aws_settings).scan()
 
-# Using an AWS Profile
+#### Using an AWS Profile
 session = AwsSessionFactory.get_session(profile_name='MyProfile', region='us-east-1')  # Raises exception if authentication is unsuccessful
 aws_scan_output_directory = AwsScanner(session, aws_settings).scan()
 
-# Assume Role
+#### Assume Role
 session = AwsSessionFactory.get_session_using_assume_role(external_id='...',
                                                           role_arn="...",
                                                           region='us-east-1')
@@ -60,6 +60,7 @@ azure_settings = AzureCloudScanSettings(
     account_name='my-account'
 )
 
+#### Using a registered application in Azure AD
 token = AzureAuthorizer.get_authorization_token(
     tenant_id='...',
     client_id='...',
@@ -72,11 +73,16 @@ azure_scan_output_directory = AzureScanner(token, azure_settings).scan()
 ## CLI usage
 
 ### For collecting data from AWS
+Dragoneye will use the same mechanisms boto3 uses for authentication. It will generally look for 
+AWS_ACCESS_KEY_ID, etc. as environment variables.
 ```
 dragoneye aws
 ```
 
-### For collecting data from Azure with a client secret
+### For collecting data from Azure
+You can authenticate in one of two ways:
+1. `az login`, which will allow dragoneye to use credentials loaded through Azure CLI.
+2. With client id and secret of an application registered in your Azure AD.
 ```
 dragoneye azure
 ```
