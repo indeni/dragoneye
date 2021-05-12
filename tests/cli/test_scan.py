@@ -28,7 +28,7 @@ class TestScan(unittest.TestCase):
         unstub()
 
     @patch.object(AzureAuthorizer, 'get_authorization_token')
-    def test_azure_ok(self, mock_azure_authorizer):
+    def test_azure_ok_all_options(self, mock_azure_authorizer):
         # Arrange
         mock_azure_authorizer.return_value = 'token'
         when(dragoneye.cloud_scanner.azure.azure_scanner.AzureScanner).scan().thenReturn('/path/to/results')
@@ -39,6 +39,19 @@ class TestScan(unittest.TestCase):
                                                '--tenant-id', str(uuid.uuid4()),
                                                '--client-id', str(uuid.uuid4()),
                                                '--client-secret', str(uuid.uuid4())])
+        # Assert
+        self.assertEqual(result.exit_code, 0)
+        self.assertTrue('/path/to/results' in result.output)
+
+    @patch.object(AzureAuthorizer, 'get_authorization_token')
+    def test_azure_ok_minimal_options(self, mock_azure_authorizer):
+        # Arrange
+        mock_azure_authorizer.return_value = 'token'
+        when(dragoneye.cloud_scanner.azure.azure_scanner.AzureScanner).scan().thenReturn('/path/to/results')
+        # Act
+        result = self.runner.invoke(scan_cli, ['azure',
+                                               os.path.join(self._current_dir(), 'resources', 'azure_commands_example.yaml'),
+                                               '--subscription-id', str(uuid.uuid4())])
         # Assert
         self.assertEqual(result.exit_code, 0)
         self.assertTrue('/path/to/results' in result.output)

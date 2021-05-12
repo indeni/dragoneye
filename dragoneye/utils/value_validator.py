@@ -1,5 +1,6 @@
 import os
 import re
+from typing import Any, Optional
 
 
 def validate_uuid(value: str, error_message='Invalid uuid format'):
@@ -8,6 +9,11 @@ def validate_uuid(value: str, error_message='Invalid uuid format'):
 
 def validate_path(value: str, error_message='Path does not exist'):
     if not os.path.exists(value):
+        raise ValueError(error_message)
+
+
+def validate_not_empty(value: Optional[Any], error_message='Value is None or empty'):
+    if not value:
         raise ValueError(error_message)
 
 
