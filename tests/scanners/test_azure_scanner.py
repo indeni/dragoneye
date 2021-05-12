@@ -28,7 +28,7 @@ class TestAzureScanner(unittest.TestCase):
             should_clean_before_scan=True,
             output_path=self.temp_dir.name
         )
-        when(dragoneye.cloud_scanner.azure.azure_scanner).invoke_get_request(ANY, ANY).thenReturn(mock({'status_code': 200, 'text': '{}'}))
+        when(dragoneye.cloud_scanner.azure.azure_scanner).invoke_get_request(ANY, ANY, on_giveup=ANY).thenReturn(mock({'status_code': 200, 'text': '{}'}))
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -41,31 +41,31 @@ class TestAzureScanner(unittest.TestCase):
         when(dragoneye.cloud_scanner.azure.azure_scanner)\
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourcegroups?api-version=2020-09-01',
-            self.auth) \
+            self.auth, on_giveup=ANY) \
             .thenReturn(mock({'status_code': 200, 'text': self.resource_groups_text}))
         ### request1, resourceGroup1
         when(dragoneye.cloud_scanner.azure.azure_scanner)\
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourceGroups/{self.resource_groups[0]}/providers/Microsoft.Compute/virtualMachines?api-version=2020-12-01',
-            self.auth)\
+            self.auth, on_giveup=ANY)\
             .thenReturn(mock({'status_code': 200, 'text': json.dumps({"value": [{"id": rg_id.format(self.subscription_id, self.resource_groups[0]), "vmName": f'{self.resource_groups[0]}-vm'}]})}))
         ### request1, resourceGroup2
         when(dragoneye.cloud_scanner.azure.azure_scanner) \
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourceGroups/{self.resource_groups[1]}/providers/Microsoft.Compute/virtualMachines?api-version=2020-12-01',
-            self.auth) \
+            self.auth, on_giveup=ANY) \
             .thenReturn(mock({'status_code': 200, 'text': json.dumps({"value": [{"id": rg_id.format(self.subscription_id, self.resource_groups[1]), "vmName": f'{self.resource_groups[1]}-vm'}]})}))
         ### request2, vm1
         when(dragoneye.cloud_scanner.azure.azure_scanner)\
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourceGroups/{self.resource_groups[0]}/providers/Microsoft.Compute/virtualMachines/{f"{self.resource_groups[0]}-vm"}?api-version=2020-12-01',
-            self.auth)\
+            self.auth, on_giveup=ANY)\
             .thenReturn(mock({'status_code': 200, 'text': json.dumps({"value": [{"id": rg_id.format(self.subscription_id, self.resource_groups[0]), "vmName": f'{self.resource_groups[0]}-vm'}]})}))
         ### request2, vm2
         when(dragoneye.cloud_scanner.azure.azure_scanner)\
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourceGroups/{self.resource_groups[1]}/providers/Microsoft.Compute/virtualMachines/{f"{self.resource_groups[1]}-vm"}?api-version=2020-12-01',
-            self.auth)\
+            self.auth, on_giveup=ANY)\
             .thenReturn(mock({'status_code': 200, 'text': json.dumps({"value": [{"id": rg_id.format(self.subscription_id, self.resource_groups[1]), "vmName": f'{self.resource_groups[1]}-vm'}]})}))
 
         # Act
@@ -106,19 +106,19 @@ class TestAzureScanner(unittest.TestCase):
         when(dragoneye.cloud_scanner.azure.azure_scanner)\
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourcegroups?api-version=2020-09-01',
-            self.auth) \
+            self.auth, on_giveup=ANY) \
             .thenReturn(mock({'status_code': 200, 'text': self.resource_groups_text}))
         ### request1, resourceGroup1
         when(dragoneye.cloud_scanner.azure.azure_scanner)\
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourceGroups/{self.resource_groups[0]}/providers/Microsoft.Compute/virtualMachines?api-version=2020-12-01',
-            self.auth)\
+            self.auth, on_giveup=ANY)\
             .thenReturn(mock({'status_code': 200, 'text': json.dumps({"value": []})}))
         ### request1, resourceGroup2
         when(dragoneye.cloud_scanner.azure.azure_scanner) \
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourceGroups/{self.resource_groups[1]}/providers/Microsoft.Compute/virtualMachines?api-version=2020-12-01',
-            self.auth) \
+            self.auth, on_giveup=ANY) \
             .thenReturn(mock({'status_code': 200, 'text': json.dumps({"value": []})}))
 
         # Act
@@ -158,37 +158,37 @@ class TestAzureScanner(unittest.TestCase):
         when(dragoneye.cloud_scanner.azure.azure_scanner)\
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourcegroups?api-version=2020-09-01',
-            self.auth) \
+            self.auth, on_giveup=ANY) \
             .thenReturn(mock({'status_code': 200, 'text': self.resource_groups_text}))
         ### request1, resourceGroup1
         when(dragoneye.cloud_scanner.azure.azure_scanner)\
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourceGroups/{self.resource_groups[0]}/providers/Microsoft.Compute/virtualMachines?api-version=2020-12-01',
-            self.auth)\
+            self.auth, on_giveup=ANY)\
             .thenReturn(mock({'status_code': 200, 'text': json.dumps({"value": [{"id": rg_id.format(self.subscription_id, self.resource_groups[0]), "vmName": f'{self.resource_groups[0]}-vm'}]})}))
         ### request1, resourceGroup2
         when(dragoneye.cloud_scanner.azure.azure_scanner) \
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourceGroups/{self.resource_groups[1]}/providers/Microsoft.Compute/virtualMachines?api-version=2020-12-01',
-            self.auth) \
+            self.auth, on_giveup=ANY) \
             .thenReturn(mock({'status_code': 200, 'text': json.dumps({"value": [{"id": rg_id.format(self.subscription_id, self.resource_groups[1]), "vmName": f'{self.resource_groups[1]}-vm'}]})}))
         ### request2, vm1
         when(dragoneye.cloud_scanner.azure.azure_scanner)\
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourceGroups/{self.resource_groups[0]}/providers/Microsoft.Compute/virtualMachines/{f"{self.resource_groups[0]}-vm"}?api-version=2020-12-01',
-            self.auth)\
+            self.auth, on_giveup=ANY)\
             .thenReturn(mock({'status_code': 200, 'text': json.dumps({"value": [{"id": rg_id.format(self.subscription_id, self.resource_groups[0]), "vmName": f'{self.resource_groups[0]}-vm'}]})}))
         ### request2, vm2
         when(dragoneye.cloud_scanner.azure.azure_scanner)\
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/resourceGroups/{self.resource_groups[1]}/providers/Microsoft.Compute/virtualMachines/{f"{self.resource_groups[1]}-vm"}?api-version=2020-12-01',
-            self.auth)\
+            self.auth, on_giveup=ANY)\
             .thenReturn(mock({'status_code': 200, 'text': json.dumps({"value": [{"id": rg_id.format(self.subscription_id, self.resource_groups[1]), "vmName": f'{self.resource_groups[1]}-vm'}]})}))
         ### request3
         when(dragoneye.cloud_scanner.azure.azure_scanner)\
             .invoke_get_request(
             f'https://management.azure.com/subscriptions/{self.subscription_id}/providers/Microsoft.Compute/request3?api-version=2020-12-01',
-            self.auth)\
+            self.auth, on_giveup=ANY)\
             .thenRaise(Exception('some exception'))
 
         # Act

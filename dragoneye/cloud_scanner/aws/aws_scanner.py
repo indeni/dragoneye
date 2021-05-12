@@ -175,17 +175,19 @@ class AwsScanner(BaseCloudScanner):
             "region": region
         }
 
+        params_string = '' if not parameters else ', '.join(f'{k}={v}' for k, v in parameters.items())
+        function_msg = f'{call_summary["service"]}.{call_summary["action"]}({params_string})'
+        logger.info(f'Invoking {function_msg}')
         data = AwsScanner._get_data(output_file, handler, method_to_call, parameters, checks, call_summary)
         AwsScanner._remove_unused_values(data)
         AwsScanner._save_results_to_file(output_file, data)
 
-        logger.info("finished call for {}".format(output_file))
+        logger.info(f'Results from {function_msg} were saved to {output_file}')
         summary.put_nowait(call_summary)
 
     @staticmethod
     def _get_data(output_file, handler, method_to_call, parameters, checks, call_summary):
-        logger.info("  Making call for {}".format(output_file))
-        data: dict = {}
+        data = None
         try:
             for retries in range(MAX_RETRIES):
                 data = AwsScanner._call_boto_function(output_file, handler, method_to_call, parameters)
@@ -347,9 +349,6 @@ class AwsScanner(BaseCloudScanner):
         region = copy.deepcopy(region)
         runner = copy.deepcopy(runner)
         region_name = region["RegionName"]
-        logger.info(
-            "* Getting {}:{}:{} info".format(region["RegionName"], runner["Service"], runner["Request"])
-        )
 
         if not self._should_run_command_on_region(runner, region):
             return

@@ -1,5 +1,6 @@
 import collections
 import os
+from queue import Queue
 from typing import List, Deque
 
 import json
@@ -19,6 +20,7 @@ class AzureScanner(BaseCloudScanner):
     def __init__(self, auth_header: str, settings: AzureCloudScanSettings):
         self.auth_header = auth_header
         self.settings = settings
+        self.summary = Queue()
 
     @elapsed_time('Scanning Azure live environment took {} seconds')
     def scan(self) -> str:
@@ -63,6 +65,8 @@ class AzureScanner(BaseCloudScanner):
         deque_tasks.append(dependable_tasks)
         execute_parallel_functions_in_threads(deque_tasks, 20)
 
+        self._print_summary()
+
         return os.path.abspath(os.path.join(account_data_dir, '..'))
 
     def _execute_scan_commands(self, scan_command: dict, subscription_id: str, headers: dict,
@@ -76,9 +80,11 @@ class AzureScanner(BaseCloudScanner):
 
             request = scan_command['Request']
             parameters = scan_command.get('Parameters', [])
-            url = request.replace('{subscriptionId}', subscription_id)
-            results = AzureScanner._get_results(url, headers, parameters, account_data_dir, resource_groups)
+            base_url = request.replace('{subscriptionId}', subscription_id)
+            results = self._get_results(base_url, headers, parameters, account_data_dir, resource_groups)
             self._save_result(results, output_file)
+            for url in results['urls']:
+                logger.info(f'Results from {url} were saved to {output_file}')
         except Exception as ex:
             logger.exception('Exception occurred: {} while running command {}'.format(ex, scan_command))
 
@@ -88,8 +94,8 @@ class AzureScanner(BaseCloudScanner):
             json.dump(result, file, indent=4, default=custom_serializer)
 
     @staticmethod
-    def _get_results(url: str, headers: dict, parameters: List[dict], account_data_dir: str, resource_groups: List[str]) -> dict:
-        results = {'value': []}
+    def _build_urls(_url: str, parameters: List[dict], account_data_dir: str, resource_groups: List[str]):
+        urls_with_params = []
         if parameters:
             for parameter in parameters:
                 param_names = parameter['Name']
@@ -97,26 +103,47 @@ class AzureScanner(BaseCloudScanner):
                 param_real_values = get_dynamic_values_from_files(param_dynamic_value, account_data_dir)
 
                 for param_real_value in param_real_values:
-                    modified_url = url
+                    modified_url = _url
                     zipped = zip(param_names.split(' '), param_real_value.split(' '))
                     for param, value in zipped:
                         modified_url = modified_url.replace('{{{0}}}'.format(param), value)
 
-                    AzureScanner._get_results_for_resource_groups(results, modified_url, headers, resource_groups)
+                    urls_with_params.append(modified_url)
         else:
-            AzureScanner._get_results_for_resource_groups(results, url, headers, resource_groups)
+            urls_with_params.append(_url)
 
+        complete_urls = []
+
+        for _url in urls_with_params:
+            if '/{resourceGroupName}/' in _url:
+                for resource_group in resource_groups:
+                    complete_urls.append(_url.replace('{{{0}}}'.format('resourceGroupName'), resource_group))
+            else:
+                complete_urls.append(_url)
+
+        return complete_urls
+
+    def _get_results(self, base_url: str, headers: dict, parameters: List[dict], account_data_dir: str, resource_groups: List[str]) -> dict:
+        results = {'value': []}
+        urls = AzureScanner._build_urls(base_url, parameters, account_data_dir, resource_groups)
+        for url in urls:
+            logger.info(f'Invoking {url}')
+            call_summary = {
+                'request': url
+            }
+            response = invoke_get_request(url, headers, on_giveup=self._default_on_backoff_giveup)
+            if response.status_code == 200:
+                AzureScanner._concat_results(results, response)
+            else:
+                call_summary['error'] = json.loads(response.content.decode('utf-8'))['error']
+                logger.error(self._parse_error(call_summary))
+            self.summary.put_nowait(call_summary)
+        results['urls'] = urls
         return results
 
     @staticmethod
-    def _get_results_for_resource_groups(results: dict, modified_url: str, headers: dict, resource_groups: List[str]) -> None:
-        if '/{resourceGroupName}/' in modified_url:
-            for resource_group in resource_groups:
-                response = invoke_get_request(modified_url.replace('{{{0}}}'.format('resourceGroupName'), resource_group), headers)
-                AzureScanner._concat_results(results, response)
-        else:
-            response = invoke_get_request(modified_url, headers)
-            AzureScanner._concat_results(results, response)
+    def _default_on_backoff_giveup(details: dict) -> None:
+        logger.error('Given up on request for {args[0]} after {tries} tries'.format(**details))
 
     @staticmethod
     def _concat_results(results: dict, response: Response) -> None:
@@ -128,10 +155,11 @@ class AzureScanner(BaseCloudScanner):
                 results['value'].append(result)
 
     def _get_resource_groups(self, headers: dict, subscription_id: str, account_data_dir: str) -> List[str]:
-        results = AzureScanner._get_results(f'https://management.azure.com/subscriptions/{subscription_id}/resourcegroups?api-version=2020-09-01',
-                                            headers, [], account_data_dir, [])
+        url = f'https://management.azure.com/subscriptions/{subscription_id}/resourcegroups?api-version=2020-09-01'
+        results = self._get_results(url, headers, [], account_data_dir, [])
         output_file = self._get_result_file_path(account_data_dir, 'resource-groups')
         self._save_result(results, output_file)
+        logger.info(f'Results from {url} were saved to {output_file}')
         return get_dynamic_values_from_files('resource-groups.json|.value[].name', account_data_dir)
 
     @staticmethod
@@ -148,3 +176,22 @@ class AzureScanner(BaseCloudScanner):
     @staticmethod
     def _get_result_file_path(account_data_dir: str, filename: str):
         return os.path.join(account_data_dir, filename + '.json')
+
+    def _print_summary(self):
+        logger.info("--------------------------------------------------------------------")
+        failures = []
+        for call_summary in self.summary.queue:
+            if 'error' in call_summary:
+                failures.append(call_summary)
+
+        logger.info("Summary: {} APIs called. {} errors".format(len(self.summary.queue), len(failures)))
+        if len(failures) > 0:
+            logger.warning("Failures:")
+            for call_summary in failures:
+                logger.warning(f"  {self._parse_error(call_summary)}")
+
+    @staticmethod
+    def _parse_error(call_summary: dict):
+        error_code = call_summary['error']['code']
+        error_msg = call_summary['error']['message']
+        return f'{call_summary["request"]}: {error_code} - {error_msg}'
