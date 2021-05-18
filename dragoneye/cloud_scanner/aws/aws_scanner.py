@@ -350,14 +350,23 @@ class AwsScanner(BaseCloudScanner):
         runner = copy.deepcopy(runner)
         region_name = region["RegionName"]
 
-        if not self._should_run_command_on_region(runner, region):
-            return
+        client_region = region_name
+        if runner['Service'] == 'globalaccelerator':
+            # globalaccelerator only has api endpoint in us-west-2
+            if region_name == self.default_region:
+                client_region = 'us-west-2'
+            else:
+                return
+        else:
+            if not self._should_run_command_on_region(runner, region):
+                return
+
         handler = self.session.client(
-            runner["Service"], region_name=region["RegionName"],
+            runner["Service"], region_name=client_region,
             config=self.handler_config
         )
 
-        filepath = os.path.join(account_dir, region["RegionName"], f'{runner["Service"]}-{runner["Request"]}')
+        filepath = os.path.join(account_dir, region_name, f'{runner["Service"]}-{runner["Request"]}')
 
         method_to_call = snakecase(runner["Request"])
         parameter_keys = set()
