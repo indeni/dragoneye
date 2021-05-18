@@ -436,7 +436,8 @@ class AwsScanner(BaseCloudScanner):
                 (region, dependable_command, account_dir, summary),
                 'exception on command {}'.format(dependable_command)))
 
-        deque_tasks.append(dependable_tasks)
+        for dependable_task in dependable_tasks:
+            deque_tasks.append([dependable_task])
         execute_parallel_functions_in_threads(deque_tasks, 20)
 
     @staticmethod
