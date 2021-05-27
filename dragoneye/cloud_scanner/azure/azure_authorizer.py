@@ -49,7 +49,7 @@ class AzureAuthorizer:
 
         if response.status_code != 200:
             raise DragoneyeException(f'Failed to authenticate. status code: {response.status_code}\n'
-                                     f'Reason: {response.text}')
+                                     f'Reason: {response.text}', response.text)
 
         response_body = json.loads(response.text)
         access_token = response_body['access_token']
@@ -64,8 +64,9 @@ class AzureAuthorizer:
             stdout, stderr = process.communicate()
             process.__enter__()
             if stderr:
+                error = stderr.decode(sys.stderr.encoding)
                 raise DragoneyeException('Failed to authenticate.\n'
-                                         f'Reason: {stderr.decode(sys.stderr.encoding)}')
+                                         f'Reason: {error}', error)
             output = stdout.decode(sys.stdout.encoding)
             ind = output.rindex('}') + 1
             output = output[:ind]
