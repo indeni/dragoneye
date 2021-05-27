@@ -55,5 +55,5 @@ class AwsSessionFactory:
         except ClientError as ex:
             if "InvalidClientTokenId" in str(ex):
                 raise DragoneyeException('sts.get_caller_identity failed with InvalidClientTokenId. '
-                                         'Likely cause is no AWS credentials are set', ex)
-            raise DragoneyeException('Unknown exception when trying to call sts.get_caller_identity: {}'.format(ex), ex)
+                                         'Likely cause is no AWS credentials are set', str(ex))
+            raise DragoneyeException('Unknown exception when trying to call sts.get_caller_identity: {}'.format(ex), str(ex))
