@@ -351,7 +351,7 @@ class AwsScanner(BaseCloudScanner):
         region_name = region["RegionName"]
 
         if runner['Service'] == 'configservice':
-            runner['Service'] = 'config'  # This is due to service name change between API (configserviec) and python SDK (config)
+            runner['Service'] = 'config'  # This is due to service name change between API (configservice) and python SDK (config)
 
         client_region = region_name
         if runner['Service'] == 'globalaccelerator':
