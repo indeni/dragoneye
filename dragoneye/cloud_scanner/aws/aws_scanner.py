@@ -350,6 +350,9 @@ class AwsScanner(BaseCloudScanner):
         runner = copy.deepcopy(runner)
         region_name = region["RegionName"]
 
+        if runner['Service'] == 'configservice':
+            runner['Service'] = 'config'  # This is due to service name change between API (configserviec) and python SDK (config)
+
         client_region = region_name
         if runner['Service'] == 'globalaccelerator':
             # globalaccelerator only has api endpoint in us-west-2
@@ -522,12 +525,14 @@ class AwsScanner(BaseCloudScanner):
         return result_param_groups
 
     def _should_run_command_on_region(self, runner: dict, region_dict: dict) -> bool:
-        if runner["Service"] in self.universal_services:
-            if region_dict["RegionName"] != self.default_region:
+        service = runner["Service"]
+        region_name = region_dict["RegionName"]
+
+        if service in self.universal_services:
+            if region_name != self.default_region:
                 return False
-        elif runner["Service"] != 'eks' and region_dict["RegionName"] not in self._get_available_regions(runner["Service"]):
-            logger.info("Skipping region {}, as {} does not exist there"
-                        .format(region_dict["RegionName"], runner["Service"]))
+        elif service != 'eks' and region_name not in self._get_available_regions(service):
+            logger.info("Skipping region {}, as {} does not exist there".format(region_name, service))
             return False
         return True
 
