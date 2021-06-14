@@ -152,7 +152,10 @@ class AzureScanner(BaseCloudScanner):
             if 'value' in result:
                 results['value'].extend(result['value'])
             else:
-                results['value'].append(result)
+                if isinstance(result, list):
+                    results['value'].extend(result)
+                else:
+                    results['value'].append(result)
 
     def _get_resource_groups(self, headers: dict, subscription_id: str, account_data_dir: str) -> List[str]:
         url = f'https://management.azure.com/subscriptions/{subscription_id}/resourcegroups?api-version=2020-09-01'
