@@ -1,3 +1,5 @@
+import json
+import os
 from abc import abstractmethod
 from enum import Enum
 
@@ -25,3 +27,8 @@ class BaseCloudScanner:
     @abstractmethod
     def scan(self) -> str:
         pass
+
+    @staticmethod
+    def _write_failures_report(directory, failures):
+        with open(os.path.join(directory, 'failures-report.json'), 'w+') as failures_report:
+            failures_report.write(json.dumps(failures, default=str))
