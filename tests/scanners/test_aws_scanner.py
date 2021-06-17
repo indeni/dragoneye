@@ -174,12 +174,20 @@ class TestAwsScanner(unittest.TestCase):
         when(self.mock_handler).request1().thenReturn({'FieldName': 'UnmatchedFieldValue'})
 
         # Act
-        self.scanner.scan()
+        result_path = self.scanner.scan()
 
         # Assert
         call_args = '\n'.join(str(arg) for arg in patched_logger.call_args)
 
         self.assertIn('serviceName.request1({}): One of the following checks has repeatedly failed: FieldName=FieldValue', call_args)
+        self._assert_failures_report_file(result_path, {'service': 'serviceName', 'action': 'request1', 'region': 'us-east-1', 'parameters': {},
+                                                        'exception': 'One of the following checks has repeatedly failed: FieldName=FieldValue'})
+
+    def _assert_failures_report_file(self, result_path, failure):
+        with open(os.path.join(result_path, 'failures-report.json')) as failures_file:
+            failures = json.loads(failures_file.read())
+            self.assertEqual(len(failures), 1)
+            self.assertEqual(failures[0], failure)
 
     @patch('logging.Logger.warning')
     def test_scan_command_check_passes(self, patched_logger):

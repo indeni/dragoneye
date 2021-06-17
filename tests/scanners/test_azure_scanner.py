@@ -24,11 +24,12 @@ class TestAzureScanner(unittest.TestCase):
         self.azure_settings = AzureCloudScanSettings(
             commands_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'azure_scan_commands.yaml'),
             subscription_id=self.subscription_id,
-            account_name=self.account_name, 
+            account_name=self.account_name,
             should_clean_before_scan=True,
             output_path=self.temp_dir.name
         )
-        when(dragoneye.cloud_scanner.azure.azure_scanner).invoke_get_request(ANY, ANY, on_giveup=ANY).thenReturn(mock({'status_code': 200, 'text': '{}'}))
+        when(dragoneye.cloud_scanner.azure.azure_scanner).invoke_get_request(ANY, ANY, on_giveup=ANY).\
+            thenReturn(mock({'status_code': 200, 'text': '{}'}))
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -226,3 +227,47 @@ class TestAzureScanner(unittest.TestCase):
 
         call_args = '\n'.join(str(arg) for arg in patched_logger.call_args)
         self.assertIn('some exception', call_args)
+
+    @patch('logging.Logger.exception')
+    def test_failed_request_be_written_to_failures_summary(self, unused_patched_logger):
+        """
+        Testing that even if a specific request failed we write the failure to the report.
+        """
+        # Arrange
+        ### Resource Groups
+        when(dragoneye.cloud_scanner.azure.azure_scanner) \
+            .invoke_get_request(
+            f'https://management.azure.com/subscriptions/{self.subscription_id}/resourcegroups?api-version=2020-09-01',
+            self.auth, on_giveup=ANY) \
+            .thenReturn(mock({'status_code': 200, 'text': self.resource_groups_text}))
+        ### request1, resourceGroup1
+        when(dragoneye.cloud_scanner.azure.azure_scanner) \
+            .invoke_get_request(
+            f'https://management.azure.com/subscriptions/{self.subscription_id}/resourceGroups/{self.resource_groups[0]}'
+            f'/providers/Microsoft.Compute/virtualMachines?api-version=2020-12-01',
+            self.auth, on_giveup=ANY) \
+            .thenReturn(mock({'status_code': 500, 'content': b'{"error": {"code": 500, "message": "some message"}}'}))
+        ### request3
+        when(dragoneye.cloud_scanner.azure.azure_scanner) \
+            .invoke_get_request(
+            f'https://management.azure.com/subscriptions/{self.subscription_id}/providers/Microsoft.Compute/request3?api-version=2020-12-01',
+            self.auth, on_giveup=ANY) \
+            .thenRaise(Exception('some exception'))
+
+        # Act
+        scanner = AzureScanner(self.token, self.azure_settings)
+        output_path = scanner.scan()
+        account_data_dir = os.path.join(output_path, self.account_name)
+
+        # Assert
+        self.assertTrue(os.path.isfile(os.path.join(account_data_dir, 'resource-groups.json')))
+        self._assert_failures_report_file(output_path, {'error': {'code': 500, 'message': 'some message'},
+                                                        'request': 'https://management.azure.com/subscriptions/subscription-id'
+                                                                   '/resourceGroups/resourceGroup1/providers/Microsoft.Compute/'
+                                                                   'virtualMachines?api-version=2020-12-01'})
+
+    def _assert_failures_report_file(self, result_path, failure):
+        with open(os.path.join(result_path, 'failures-report.json')) as failures_file:
+            failures = json.loads(failures_file.read())
+            self.assertEqual(len(failures), 1)
+            self.assertEqual(failures[0], failure)

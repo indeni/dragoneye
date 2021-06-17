@@ -65,7 +65,7 @@ class AzureScanner(BaseCloudScanner):
         deque_tasks.append(dependable_tasks)
         execute_parallel_functions_in_threads(deque_tasks, 20)
 
-        self._print_summary()
+        self._print_summary(os.path.join(account_data_dir, '..'))
 
         return os.path.abspath(os.path.join(account_data_dir, '..'))
 
@@ -180,7 +180,7 @@ class AzureScanner(BaseCloudScanner):
     def _get_result_file_path(account_data_dir: str, filename: str):
         return os.path.join(account_data_dir, filename + '.json')
 
-    def _print_summary(self):
+    def _print_summary(self, directory):
         logger.info("--------------------------------------------------------------------")
         failures = []
         for call_summary in self.summary.queue:
@@ -192,6 +192,8 @@ class AzureScanner(BaseCloudScanner):
             logger.warning("Failures:")
             for call_summary in failures:
                 logger.warning(f"  {self._parse_error(call_summary)}")
+
+        self._write_failures_report(directory, failures)
 
     @staticmethod
     def _parse_error(call_summary: dict):

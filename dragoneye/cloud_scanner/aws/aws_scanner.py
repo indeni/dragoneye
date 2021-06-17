@@ -69,7 +69,7 @@ class AwsScanner(BaseCloudScanner):
         deque_tasks.append(tasks)
         execute_parallel_functions_in_threads(deque_tasks, len(region_dict_list))
 
-        self._print_summary(summary)
+        self._print_summary(summary, os.path.join(account_data_dir, '..'))
 
         return os.path.abspath(os.path.join(account_data_dir, '..'))
 
@@ -106,13 +106,12 @@ class AwsScanner(BaseCloudScanner):
         return region_list
 
     @staticmethod
-    def _print_summary(summary: Queue):
+    def _print_summary(summary: Queue, directory: str):
         logger.info("--------------------------------------------------------------------")
         failures = []
         for call_summary in summary.queue:
             if "exception" in call_summary:
                 failures.append(call_summary)
-
         logger.info("Summary: {} APIs called. {} errors".format(len(summary.queue), len(failures)))
         if len(failures) > 0:
             logger.warning("Failures:")
@@ -125,6 +124,8 @@ class AwsScanner(BaseCloudScanner):
                         call_summary["exception"],
                     )
                 )
+        AwsScanner._write_failures_report(directory, failures)
+
 
     @staticmethod
     def _get_identifier_from_parameter(parameter):
