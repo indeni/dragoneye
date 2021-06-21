@@ -1,0 +1,184 @@
+import collections
+import itertools
+import json
+import os
+from functools import lru_cache
+from queue import Queue
+from typing import List, Deque, Optional
+from googleapiclient.discovery import build
+
+from dragoneye.cloud_scanner.base_cloud_scanner import BaseCloudScanner
+from dragoneye.cloud_scanner.gcp.gcp_scan_settings import GcpCloudScanSettings
+from dragoneye.utils.misc_utils import elapsed_time, load_yaml, init_directory, custom_serializer, get_dynamic_values_from_files
+from dragoneye.utils.threading_utils import ThreadedFunctionData, execute_parallel_functions_in_threads
+from dragoneye.utils.app_logger import logger
+
+
+class GcpScanner(BaseCloudScanner):
+    def __init__(self, credentials, settings: GcpCloudScanSettings):
+        self.credentials = credentials
+        self.settings = settings
+        self.scan_commands = None
+        self.services: list = []
+        self.summary = Queue()
+
+    @elapsed_time('Scanning GCP live environment took {} seconds')
+    def scan(self) -> str:
+        self.scan_commands = load_yaml(self.settings.commands_path)
+        account_data_dir = init_directory(self.settings.output_path, self.settings.account_name, self.settings.clean)
+
+        dependable_commands = []
+        non_dependable_commands = []
+        for command in self.scan_commands:
+            if "Parameters" in command:
+                dependable_commands.append(command)
+            else:
+                non_dependable_commands.append(command)
+
+        non_dependable_tasks: List[ThreadedFunctionData] = []
+        dependable_tasks: List[ThreadedFunctionData] = []
+        deque_tasks: Deque[List[ThreadedFunctionData]] = collections.deque()
+
+        for non_dependable_command in non_dependable_commands:
+            non_dependable_tasks.append(ThreadedFunctionData(
+                self._execute_scan_commands,
+                (non_dependable_command, account_data_dir),
+                'exception on command {}'.format(non_dependable_command)))
+
+        deque_tasks.append(non_dependable_tasks)
+
+        for dependable_command in dependable_commands:
+            dependable_tasks.append(ThreadedFunctionData(
+                self._execute_scan_commands,
+                (dependable_command, account_data_dir),
+                'exception on command {}'.format(dependable_command)))
+
+        for dependable_task in dependable_tasks:
+            deque_tasks.append([dependable_task])
+        execute_parallel_functions_in_threads(deque_tasks, 20)
+
+        self._print_summary()
+
+        for service in self.services:
+            service.close()
+
+        return os.path.abspath(os.path.join(account_data_dir, '..'))
+
+    def _execute_scan_commands(self, scan_command: dict, account_data_dir: str) -> None:
+        service_name = scan_command['ServiceName']
+        api_version = scan_command['ApiVersion']
+        resource_type = scan_command['ResourceType']
+        output_file = os.path.join(account_data_dir, f'{service_name}-{api_version}-{resource_type}.json')
+        if os.path.isfile(output_file):
+            # Data already scanned, so skip
+            logger.warning('Response already present at {}'.format(output_file))
+            return
+
+        service = self._create_service(service_name, api_version)
+        resource_response = getattr(service, resource_type)()
+
+        all_parameters = self._get_parameters(scan_command, account_data_dir)
+        all_items = []
+        all_call_summary = []
+        call_summary = {
+            "service": service_name,
+            "api_version": api_version,
+            "resource_type": resource_type
+        }
+
+        if all_parameters is not None:
+            for parameters in all_parameters:
+                updated_call_summary = call_summary.copy()
+                updated_call_summary['parameters'] = parameters
+                all_items.extend(self._get_results(updated_call_summary, resource_response))
+                all_call_summary.append(updated_call_summary)
+        else:
+            updated_call_summary = call_summary.copy()
+            updated_call_summary['parameters'] = {}
+            all_items.extend(self._get_results(updated_call_summary, resource_response))
+            all_call_summary.append(updated_call_summary)
+
+        self.summary.put_nowait(call_summary)
+
+        with open(output_file, "w") as file:
+            json.dump({'value': all_items}, file, indent=4, default=custom_serializer)
+
+        for call_summary in all_call_summary:
+            print(f'Results from {self._get_call_representation(call_summary)} were saved to {output_file}')
+
+    @lru_cache(maxsize=None)
+    def _create_service(self, service_name: str, version: str):
+        service = build(service_name, version, credentials=self.credentials)
+        self.services.append(service)
+        return service
+
+    @staticmethod
+    def _get_parameters(scan_command: dict, account_data_dir: str) -> Optional[List[dict]]:
+        if not scan_command.get('Parameters'):
+            return None  # No parameters required
+
+        parameters = []
+        parameters_data = {}
+
+        for parameter in scan_command.get('Parameters', []):
+            param_names = parameter['Name']
+            param_dynamic_value = parameter['Value']
+            param_real_values = get_dynamic_values_from_files(param_dynamic_value, account_data_dir)
+            parameters_data[param_names] = list(dict.fromkeys(param_real_values))
+
+        for p in itertools.product(*parameters_data.values()):
+            keys = parameters_data.keys()
+            parameters.append({key: value for key, value in zip(keys, p)})
+
+        return parameters
+
+    def _print_summary(self):
+        logger.info("--------------------------------------------------------------------")
+        failures = []
+        for call_summary in self.summary.queue:
+            if 'error' in call_summary:
+                failures.append(call_summary)
+
+        logger.info("Summary: {} APIs called. {} errors".format(len(self.summary.queue), len(failures)))
+        if len(failures) > 0:
+            logger.warning("Failures:")
+            for call_summary in failures:
+                logger.warning(f"  {self._parse_error(call_summary)}")
+
+    @staticmethod
+    def _parse_error(call_summary: dict):
+        error_msg = f'Service: {call_summary["service"]} ' \
+                    f'APIVersion: {call_summary["api_version"]} ' \
+                    f'ResourceType: {call_summary["resource_type"]} '
+        if call_summary['parameters']:
+            params_msg = ' '.join([f'{key}={value}' for key, value in call_summary["parameters"]])
+            error_msg += f'Parameters: {params_msg} '
+
+        error_msg += call_summary['error']
+
+        return error_msg
+
+    def _get_results(self, call_summary: dict, resource_response):
+        all_items = []
+        try:
+            logger.info(f'Invoking {self._get_call_representation(call_summary)}')
+            request = resource_response.list(**call_summary['parameters'])
+
+            while request is not None:
+                response = request.execute()
+                for values in response.values():
+                    if isinstance(values, list):
+                        all_items.extend(values)
+                        break
+
+                request = resource_response.list_next(previous_request=request, previous_response=response)
+        except Exception as ex:
+            call_summary['error'] = str(ex)
+        finally:
+            self.summary.put_nowait(call_summary)
+            return all_items
+
+    @staticmethod
+    def _get_call_representation(call_summary: dict) -> str:
+        parameters_text = ', '.join(f'{key}={value}' for key, value in call_summary['parameters'].items())
+        return f'{call_summary["service"]}.{call_summary["api_version"]}.{call_summary["resource_type"]}.list({parameters_text})'

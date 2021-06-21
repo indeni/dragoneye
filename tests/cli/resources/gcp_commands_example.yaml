@@ -1,0 +1,7 @@
+# https://cloud.google.com/compute/docs/reference/rest/v1/instances/list
+- ServiceName: compute
+  ApiVersion: v1
+  ResourceType: zones
+  Parameters:
+    - Name: project
+      Value: dev-tomer

@@ -8,7 +8,7 @@ from click.testing import CliRunner
 from mockito import when, unstub, mock
 
 import dragoneye
-from dragoneye import AzureAuthorizer, AwsSessionFactory
+from dragoneye import AzureAuthorizer, AwsSessionFactory, GcpCredentialsFactory
 from dragoneye.scan import scan_cli
 
 
@@ -102,7 +102,8 @@ class TestScan(unittest.TestCase):
                                                '--client-secret', str(uuid.uuid4())])
         # Assert
         self.assertEqual(result.exit_code, 1)
-        self._assert_exception(result.exception, ValueError, 'Path does not exist')
+        self._assert_exception(result.exception, ValueError, 'Could not find file: '
+                                                             '/Users/tomerv/dev/python/dragoneye/tests/cli/non-existing-file.yaml')
 
     @patch.object(AwsSessionFactory, 'get_session')
     def test_aws_no_profile_ok(self, mock_aws_session_factory):
@@ -132,7 +133,47 @@ class TestScan(unittest.TestCase):
         result = self.runner.invoke(scan_cli, ['aws', os.path.join(self._current_dir(), 'non-existing-file.yaml')])
         # Assert
         self.assertEqual(result.exit_code, 1)
-        self._assert_exception(result.exception, ValueError, 'Path does not exist')
+        self._assert_exception(result.exception, ValueError, 'Could not find file: '
+                                                             '/Users/tomerv/dev/python/dragoneye/tests/cli/non-existing-file.yaml')
+
+    @patch.object(GcpCredentialsFactory, 'from_service_account_file')
+    def test_gcp_ok_with_credentials(self, mock_azure_authorizer):
+        # Arrange
+        mock_azure_authorizer.return_value = mock()
+        when(dragoneye.cloud_scanner.gcp.gcp_scanner.GcpScanner).scan().thenReturn('/path/to/results')
+        # Act
+        result = self.runner.invoke(scan_cli, ['gcp',
+                                               os.path.join(self._current_dir(), 'resources', 'gcp_commands_example.yaml'),
+                                               '--credentials-path',
+                                               os.path.join(self._current_dir(), 'resources', 'service_account_credentials.json')])
+        # Assert
+        self.assertEqual(result.exit_code, 0)
+        self.assertTrue('/path/to/results' in result.output)
+
+    @patch.object(GcpCredentialsFactory, 'get_default_credentials')
+    def test_gcp_ok_without_credentials(self, mock_azure_authorizer):
+        # Arrange
+        mock_azure_authorizer.return_value = mock()
+        when(dragoneye.cloud_scanner.gcp.gcp_scanner.GcpScanner).scan().thenReturn('/path/to/results')
+        # Act
+        result = self.runner.invoke(scan_cli, ['gcp',
+                                               os.path.join(self._current_dir(), 'resources', 'gcp_commands_example.yaml')])
+        # Assert
+        self.assertEqual(result.exit_code, 0)
+        self.assertTrue('/path/to/results' in result.output)
+
+    @patch.object(GcpCredentialsFactory, 'get_default_credentials')
+    def test_gcp_invalid_scan_commands_path(self, mock_azure_authorizer):
+        # Arrange
+        mock_azure_authorizer.return_value = mock()
+        when(dragoneye.cloud_scanner.gcp.gcp_scanner.GcpScanner).scan().thenReturn('/path/to/results')
+        # Act
+        result = self.runner.invoke(scan_cli, ['gcp',
+                                               os.path.join(self._current_dir(), 'non-existing-file.yaml')])
+        # Assert
+        self.assertEqual(result.exit_code, 1)
+        self._assert_exception(result.exception, ValueError, 'Could not find file: '
+                                                             '/Users/tomerv/dev/python/dragoneye/tests/cli/non-existing-file.yaml')
 
     def _assert_exception(self, exception, ex_type, ex_message):
         self.assertEqual(type(exception), ex_type)

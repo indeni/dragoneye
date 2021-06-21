@@ -62,7 +62,8 @@ class AzureScanner(BaseCloudScanner):
                 (dependable_command, subscription_id, headers, account_data_dir, resource_groups),
                 'exception on command {}'.format(dependable_command)))
 
-        deque_tasks.append(dependable_tasks)
+        for dependable_task in dependable_tasks:
+            deque_tasks.append([dependable_task])
         execute_parallel_functions_in_threads(deque_tasks, 20)
 
         self._print_summary(os.path.join(account_data_dir, '..'))

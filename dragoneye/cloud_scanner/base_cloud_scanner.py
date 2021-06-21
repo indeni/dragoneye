@@ -7,6 +7,7 @@ from enum import Enum
 class CloudProvider(str, Enum):
     AWS = 'aws'
     AZURE = 'azure'
+    GCP = 'gcp'
 
 
 class CloudScanSettings:
