@@ -6,6 +6,7 @@
 - ServiceName: compute
   ApiVersion: v1
   ResourceType: zones
+  Method: list
   Parameters:
     - Name: project
       Value: dev-tomer
@@ -14,8 +15,27 @@
 - ServiceName: compute
   ApiVersion: v1
   ResourceType: instances
+  Method: list
   Parameters:
     - Name: project
       Value: dev-tomer
     - Name: zone
       Value: compute-v1-zones.json|.value[].name
+#
+#- ServiceName: storage
+#  ApiVersion: v1
+#  ResourceType: buckets
+#  Method: get
+#  Parameters:
+#    - Name: bucket
+#      Value: x.json|.names[]
+#
+#- ServiceName: compute
+#  ApiVersion: v1
+#  ResourceType: instances
+#  Method: list
+#  Parameters:
+#    - Name: project zone
+#      Value: x.json|.val[] | .project + " " + .zone
+#    - Name: third
+#      Value: x

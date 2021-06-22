@@ -6,6 +6,7 @@ from functools import lru_cache
 from queue import Queue
 from typing import List, Deque, Optional
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from dragoneye.cloud_scanner.base_cloud_scanner import BaseCloudScanner
 from dragoneye.cloud_scanner.gcp.gcp_scan_settings import GcpCloudScanSettings
@@ -83,7 +84,8 @@ class GcpScanner(BaseCloudScanner):
         call_summary = {
             "service": service_name,
             "api_version": api_version,
-            "resource_type": resource_type
+            "resource_type": resource_type,
+            'method': scan_command['Method']
         }
 
         if all_parameters is not None:
@@ -98,13 +100,15 @@ class GcpScanner(BaseCloudScanner):
             all_items.extend(self._get_results(updated_call_summary, resource_response))
             all_call_summary.append(updated_call_summary)
 
-        self.summary.put_nowait(call_summary)
-
         with open(output_file, "w") as file:
             json.dump({'value': all_items}, file, indent=4, default=custom_serializer)
 
         for call_summary in all_call_summary:
-            print(f'Results from {self._get_call_representation(call_summary)} were saved to {output_file}')
+            self.summary.put_nowait(call_summary)
+            if 'error' in call_summary:
+                print(self._parse_error(call_summary))
+            else:
+                print(f'Results from {self._get_call_representation(call_summary)} were saved to {output_file}')
 
     @lru_cache(maxsize=None)
     def _create_service(self, service_name: str, version: str):
@@ -124,7 +128,13 @@ class GcpScanner(BaseCloudScanner):
             param_names = parameter['Name']
             param_dynamic_value = parameter['Value']
             param_real_values = get_dynamic_values_from_files(param_dynamic_value, account_data_dir)
-            parameters_data[param_names] = list(dict.fromkeys(param_real_values))
+            for param_real_value in param_real_values:
+                zipped = zip(param_names.split(' '), param_real_value.split(' '))
+                for param, value in zipped:
+                    if param not in parameters_data:
+                        parameters_data[param] = []
+                    if value not in parameters_data[param]:
+                        parameters_data[param].append(value)
 
         for p in itertools.product(*parameters_data.values()):
             keys = parameters_data.keys()
@@ -132,7 +142,7 @@ class GcpScanner(BaseCloudScanner):
 
         return parameters
 
-    def _print_summary(self):
+    def _print_summary(self, directory):
         logger.info("--------------------------------------------------------------------")
         failures = []
         for call_summary in self.summary.queue:
@@ -145,40 +155,41 @@ class GcpScanner(BaseCloudScanner):
             for call_summary in failures:
                 logger.warning(f"  {self._parse_error(call_summary)}")
 
-    @staticmethod
-    def _parse_error(call_summary: dict):
-        error_msg = f'Service: {call_summary["service"]} ' \
-                    f'APIVersion: {call_summary["api_version"]} ' \
-                    f'ResourceType: {call_summary["resource_type"]} '
-        if call_summary['parameters']:
-            params_msg = ' '.join([f'{key}={value}' for key, value in call_summary["parameters"]])
-            error_msg += f'Parameters: {params_msg} '
-
-        error_msg += call_summary['error']
-
-        return error_msg
+        self._write_failures_report(directory, failures)
 
     def _get_results(self, call_summary: dict, resource_response):
         all_items = []
         try:
             logger.info(f'Invoking {self._get_call_representation(call_summary)}')
-            request = resource_response.list(**call_summary['parameters'])
+            method_name = call_summary['method']
+            method_name_next = f'{method_name}_next'
+            method = getattr(resource_response, method_name)
+            request = method(**call_summary['parameters'])
 
             while request is not None:
                 response = request.execute()
-                for values in response.values():
-                    if isinstance(values, list):
-                        all_items.extend(values)
-                        break
+                if 'list' in method_name or 'nextPageToken' in response:
+                    for values in response.values():
+                        if isinstance(values, list):
+                            all_items.extend(values)
+                            break
 
-                request = resource_response.list_next(previous_request=request, previous_response=response)
-        except Exception as ex:
-            call_summary['error'] = str(ex)
+                    request = getattr(resource_response, method_name_next)(previous_request=request, previous_response=response)
+                else:
+                    all_items.append(response)
+                    break
+        except HttpError as ex:
+            call_summary['error'] = json.loads(ex.content.decode('utf-8'))['error']
         finally:
-            self.summary.put_nowait(call_summary)
             return all_items
 
     @staticmethod
     def _get_call_representation(call_summary: dict) -> str:
         parameters_text = ', '.join(f'{key}={value}' for key, value in call_summary['parameters'].items())
-        return f'{call_summary["service"]}.{call_summary["api_version"]}.{call_summary["resource_type"]}.list({parameters_text})'
+        return f'{call_summary["service"]}.{call_summary["api_version"]}.{call_summary["resource_type"]}.{call_summary["method"]}({parameters_text})'
+
+    @classmethod
+    def _parse_error(cls, call_summary: dict):
+        error_code = call_summary['error']['code']
+        error_msg = call_summary['error']['message']
+        return f'{cls._get_call_representation(call_summary)}: {error_code} - {error_msg}'

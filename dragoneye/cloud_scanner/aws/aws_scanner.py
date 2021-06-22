@@ -126,7 +126,6 @@ class AwsScanner(BaseCloudScanner):
                 )
         AwsScanner._write_failures_report(directory, failures)
 
-
     @staticmethod
     def _get_identifier_from_parameter(parameter):
         if isinstance(parameter, list):
