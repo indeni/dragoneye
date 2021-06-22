@@ -3,7 +3,6 @@ import itertools
 import json
 import os
 from functools import lru_cache
-from queue import Queue
 from typing import List, Deque, Optional
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -17,20 +16,19 @@ from dragoneye.utils.app_logger import logger
 
 class GcpScanner(BaseCloudScanner):
     def __init__(self, credentials, settings: GcpCloudScanSettings):
+        super().__init__()
         self.credentials = credentials
         self.settings = settings
-        self.scan_commands = None
         self.services: list = []
-        self.summary = Queue()
 
     @elapsed_time('Scanning GCP live environment took {} seconds')
     def scan(self) -> str:
-        self.scan_commands = load_yaml(self.settings.commands_path)
-        account_data_dir = init_directory(self.settings.output_path, self.settings.account_name, self.settings.clean)
+        scan_commands = load_yaml(self.settings.commands_path)
+        self.account_data_dir = init_directory(self.settings.output_path, self.settings.account_name, self.settings.clean)
 
         dependable_commands = []
         non_dependable_commands = []
-        for command in self.scan_commands:
+        for command in scan_commands:
             if "Parameters" in command:
                 dependable_commands.append(command)
             else:
@@ -43,7 +41,7 @@ class GcpScanner(BaseCloudScanner):
         for non_dependable_command in non_dependable_commands:
             non_dependable_tasks.append(ThreadedFunctionData(
                 self._execute_scan_commands,
-                (non_dependable_command, account_data_dir),
+                (non_dependable_command,),
                 'exception on command {}'.format(non_dependable_command)))
 
         deque_tasks.append(non_dependable_tasks)
@@ -51,7 +49,7 @@ class GcpScanner(BaseCloudScanner):
         for dependable_command in dependable_commands:
             dependable_tasks.append(ThreadedFunctionData(
                 self._execute_scan_commands,
-                (dependable_command, account_data_dir),
+                (dependable_command,),
                 'exception on command {}'.format(dependable_command)))
 
         for dependable_task in dependable_tasks:
@@ -63,13 +61,13 @@ class GcpScanner(BaseCloudScanner):
         for service in self.services:
             service.close()
 
-        return os.path.abspath(os.path.join(account_data_dir, '..'))
+        return os.path.abspath(os.path.join(self.account_data_dir, '..'))
 
-    def _execute_scan_commands(self, scan_command: dict, account_data_dir: str) -> None:
+    def _execute_scan_commands(self, scan_command: dict) -> None:
         service_name = scan_command['ServiceName']
         api_version = scan_command['ApiVersion']
         resource_type = scan_command['ResourceType']
-        output_file = os.path.join(account_data_dir, f'{service_name}-{api_version}-{resource_type}.json')
+        output_file = os.path.join(self.account_data_dir, f'{service_name}-{api_version}-{resource_type}.json')
         if os.path.isfile(output_file):
             # Data already scanned, so skip
             logger.warning('Response already present at {}'.format(output_file))
@@ -78,7 +76,7 @@ class GcpScanner(BaseCloudScanner):
         service = self._create_service(service_name, api_version)
         resource_response = getattr(service, resource_type)()
 
-        all_parameters = self._get_parameters(scan_command, account_data_dir)
+        all_parameters = self._get_parameters(scan_command, self.account_data_dir)
         all_items = []
         all_call_summary = []
         call_summary = {
@@ -142,21 +140,6 @@ class GcpScanner(BaseCloudScanner):
 
         return parameters
 
-    def _print_summary(self, directory):
-        logger.info("--------------------------------------------------------------------")
-        failures = []
-        for call_summary in self.summary.queue:
-            if 'error' in call_summary:
-                failures.append(call_summary)
-
-        logger.info("Summary: {} APIs called. {} errors".format(len(self.summary.queue), len(failures)))
-        if len(failures) > 0:
-            logger.warning("Failures:")
-            for call_summary in failures:
-                logger.warning(f"  {self._parse_error(call_summary)}")
-
-        self._write_failures_report(directory, failures)
-
     def _get_results(self, call_summary: dict, resource_response):
         all_items = []
         try:
@@ -188,8 +171,8 @@ class GcpScanner(BaseCloudScanner):
         parameters_text = ', '.join(f'{key}={value}' for key, value in call_summary['parameters'].items())
         return f'{call_summary["service"]}.{call_summary["api_version"]}.{call_summary["resource_type"]}.{call_summary["method"]}({parameters_text})'
 
-    @classmethod
-    def _parse_error(cls, call_summary: dict):
+    @staticmethod
+    def _parse_error(call_summary: dict) -> str:
         error_code = call_summary['error']['code']
         error_msg = call_summary['error']['message']
-        return f'{cls._get_call_representation(call_summary)}: {error_code} - {error_msg}'
+        return f'{GcpScanner._get_call_representation(call_summary)}: {error_code} - {error_msg}'
