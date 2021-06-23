@@ -1,5 +1,4 @@
 import os
-from typing import List, Optional
 
 from dragoneye.cloud_scanner.base_cloud_scanner import CloudScanSettings, CloudProvider
 

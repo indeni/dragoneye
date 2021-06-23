@@ -67,7 +67,8 @@ class GcpScanner(BaseCloudScanner):
         service_name = scan_command['ServiceName']
         api_version = scan_command['ApiVersion']
         resource_type = scan_command['ResourceType']
-        output_file = os.path.join(self.account_data_dir, f'{service_name}-{api_version}-{resource_type}.json')
+        method = scan_command['Method']
+        output_file = os.path.join(self.account_data_dir, f'{service_name}-{api_version}-{resource_type}-{method}.json')
         if os.path.isfile(output_file):
             # Data already scanned, so skip
             logger.warning('Response already present at {}'.format(output_file))
@@ -83,7 +84,7 @@ class GcpScanner(BaseCloudScanner):
             "service": service_name,
             "api_version": api_version,
             "resource_type": resource_type,
-            'method': scan_command['Method']
+            'method': method
         }
 
         if all_parameters is not None:
@@ -119,26 +120,48 @@ class GcpScanner(BaseCloudScanner):
         if not scan_command.get('Parameters'):
             return None  # No parameters required
 
-        parameters = []
-        parameters_data = {}
+        multi_params = []
+        single_param_product = []
+        single_param_data = {}
+        multi_param_data = {}
 
         for parameter in scan_command.get('Parameters', []):
             param_names = parameter['Name']
             param_dynamic_value = parameter['Value']
             param_real_values = get_dynamic_values_from_files(param_dynamic_value, account_data_dir)
-            for param_real_value in param_real_values:
-                zipped = zip(param_names.split(' '), param_real_value.split(' '))
-                for param, value in zipped:
-                    if param not in parameters_data:
-                        parameters_data[param] = []
-                    if value not in parameters_data[param]:
-                        parameters_data[param].append(value)
+            if ' ' in param_names:
+                for param_real_value in param_real_values:
+                    zipped = zip(param_names.split(' '), param_real_value.split(' '))
+                    for param, value in zipped:
+                        if param not in multi_param_data:
+                            multi_param_data[param] = []
+                        if value not in multi_param_data[param]:
+                            multi_param_data[param].append(value)
+            else:
+                single_param_data[param_names] = param_real_values
 
-        for p in itertools.product(*parameters_data.values()):
-            keys = parameters_data.keys()
-            parameters.append({key: value for key, value in zip(keys, p)})
+        keys = single_param_data.keys()
+        for product in itertools.product(*single_param_data.values()):
+            if product:
+                single_param_product.append(dict(zip(keys, product)))
 
-        return parameters
+        multi_param_length = len(next(iter(multi_param_data.values()), []))
+        for index in range(multi_param_length - 1):
+            multi_param = {}
+            for key, items in multi_param_data.items():
+                multi_param[key] = items[index]
+            multi_params.append(multi_param)
+
+        if multi_params and single_param_product:
+            stitched_params = []
+            for multi_param in multi_params:
+                for single_param in single_param_product:
+                    multi_param_copy = multi_param.copy()
+                    multi_param_copy.update(single_param)
+                    stitched_params.append(multi_param_copy)
+            return stitched_params
+        else:
+            return multi_params or single_param_product
 
     def _get_results(self, call_summary: dict, resource_response):
         all_items = []
@@ -159,12 +182,15 @@ class GcpScanner(BaseCloudScanner):
 
                     request = getattr(resource_response, method_name_next)(previous_request=request, previous_response=response)
                 else:
-                    all_items.append(response)
+                    if response:
+                        all_items.append(response)
                     break
         except HttpError as ex:
             call_summary['error'] = json.loads(ex.content.decode('utf-8'))['error']
-        finally:
-            return all_items
+        except Exception as ex:
+            call_summary['exception'] = str(ex)
+
+        return all_items
 
     @staticmethod
     def _get_call_representation(call_summary: dict) -> str:
@@ -173,6 +199,9 @@ class GcpScanner(BaseCloudScanner):
 
     @staticmethod
     def _parse_error(call_summary: dict) -> str:
-        error_code = call_summary['error']['code']
-        error_msg = call_summary['error']['message']
-        return f'{GcpScanner._get_call_representation(call_summary)}: {error_code} - {error_msg}'
+        if 'error' in call_summary:
+            error_code = call_summary['error']['code']
+            error_msg = call_summary['error']['message']
+            return f'{GcpScanner._get_call_representation(call_summary)}: {error_code} - {error_msg}'
+        else:
+            return f'{GcpScanner._get_call_representation(call_summary)}: {call_summary["exception"]}'

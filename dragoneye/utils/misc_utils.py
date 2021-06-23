@@ -75,7 +75,7 @@ def get_dynamic_values_from_files(value: str, directory: str) -> list:
     parameter_file = value.split("|")[0]
     parameter_file = "{}/{}".format(
         directory, parameter_file
-    )
+    ).strip()
 
     # Get array if a globbing pattern is used (ex. "*.json")
     parameter_files = glob.glob(parameter_file)

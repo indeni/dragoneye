@@ -1,7 +1,3 @@
-# Important notes:
-# 1. Results are saved to {ServiceName}-{ApiVersion}-{ResourceType}.json
-# 2. Currently only supporting 'list' methods.
-
 # https://cloud.google.com/compute/docs/reference/rest/v1/instances/list
 - ServiceName: compute
   ApiVersion: v1
