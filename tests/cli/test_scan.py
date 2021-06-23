@@ -2,6 +2,7 @@ import os
 import shutil
 import unittest
 import uuid
+from typing import List
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -102,8 +103,7 @@ class TestScan(unittest.TestCase):
                                                '--client-secret', str(uuid.uuid4())])
         # Assert
         self.assertEqual(result.exit_code, 1)
-        self._assert_exception(result.exception, ValueError, 'Could not find file: '
-                                                             '/Users/tomerv/dev/python/dragoneye/tests/cli/non-existing-file.yaml')
+        self._assert_invalid_scan_commands_path_exception(result.exception, ['Could not find file: ', 'non-existing-file.yaml'])
 
     @patch.object(AwsSessionFactory, 'get_session')
     def test_aws_no_profile_ok(self, mock_aws_session_factory):
@@ -133,8 +133,7 @@ class TestScan(unittest.TestCase):
         result = self.runner.invoke(scan_cli, ['aws', os.path.join(self._current_dir(), 'non-existing-file.yaml')])
         # Assert
         self.assertEqual(result.exit_code, 1)
-        self._assert_exception(result.exception, ValueError, 'Could not find file: '
-                                                             '/Users/tomerv/dev/python/dragoneye/tests/cli/non-existing-file.yaml')
+        self._assert_invalid_scan_commands_path_exception(result.exception, ['Could not find file: ', 'non-existing-file.yaml'])
 
     @patch.object(GcpCredentialsFactory, 'from_service_account_file')
     def test_gcp_ok_with_credentials(self, mock_azure_authorizer):
@@ -172,12 +171,16 @@ class TestScan(unittest.TestCase):
                                                os.path.join(self._current_dir(), 'non-existing-file.yaml')])
         # Assert
         self.assertEqual(result.exit_code, 1)
-        self._assert_exception(result.exception, ValueError, 'Could not find file: '
-                                                             '/Users/tomerv/dev/python/dragoneye/tests/cli/non-existing-file.yaml')
+        self._assert_invalid_scan_commands_path_exception(result.exception, ['Could not find file: ', 'non-existing-file.yaml'])
 
     def _assert_exception(self, exception, ex_type, ex_message):
         self.assertEqual(type(exception), ex_type)
         self.assertEqual(exception.args, ex_type(ex_message).args)
+
+    def _assert_invalid_scan_commands_path_exception(self, exception, substrings: List[str]):
+        self.assertEqual(type(exception), ValueError)
+        for substring in substrings:
+            self.assertTrue(any(substring in exception_arg for exception_arg in exception.args))
 
     @staticmethod
     def _current_dir():
