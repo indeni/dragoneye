@@ -38,10 +38,15 @@ def safe_cli_entry_point():
                        '\n\nSCAN_COMMANDS_PATH: The file path to the yaml file that contains all the scan commands to run')
 @click.argument('scan-commands-path',
                 type=click.STRING)
+@click.argument('project-id',
+                type=click.STRING)
 @click.option('--cloud-account-name', '-n',
               help='The name of your cloud account, the default value is \'default\'',
               type=click.STRING,
               default='default')
+@click.option('--project-id',
+              help='The ID of the project to scan',
+              type=click.STRING,)
 @click.option('--clean',
               help='Remove any existing data for the account before gathering',
               is_flag=True,
@@ -54,7 +59,7 @@ def safe_cli_entry_point():
               help='The path to the `Google Application Credentials` json file. If left empty, will attempt to get the default credentials',
               type=click.STRING,
               default=None)
-def gcp(scan_commands_path: str, clean: bool, output_path: str, cloud_account_name: str, credentials_path: Optional[str]):
+def gcp(scan_commands_path: str, project_id: str, clean: bool, output_path: str, cloud_account_name: str, credentials_path: Optional[str]):
     validate_path(scan_commands_path, f'Could not find file: {scan_commands_path}')
     if credentials_path:
         validate_path(credentials_path)
@@ -62,7 +67,8 @@ def gcp(scan_commands_path: str, clean: bool, output_path: str, cloud_account_na
     gcp_scan_settings = GcpCloudScanSettings(commands_path=scan_commands_path,
                                              account_name=cloud_account_name,
                                              output_path=output_path,
-                                             should_clean_before_scan=clean)
+                                             should_clean_before_scan=clean,
+                                             project_id=project_id)
     if credentials_path:
         credentials = GcpCredentialsFactory.from_service_account_file(credentials_path)
     else:

@@ -143,6 +143,7 @@ class TestScan(unittest.TestCase):
         # Act
         result = self.runner.invoke(scan_cli, ['gcp',
                                                os.path.join(self._current_dir(), 'resources', 'gcp_commands_example.yaml'),
+                                               'projectid',
                                                '--credentials-path',
                                                os.path.join(self._current_dir(), 'resources', 'service_account_credentials.json')])
         # Assert
@@ -156,7 +157,8 @@ class TestScan(unittest.TestCase):
         when(dragoneye.cloud_scanner.gcp.gcp_scanner.GcpScanner).scan().thenReturn('/path/to/results')
         # Act
         result = self.runner.invoke(scan_cli, ['gcp',
-                                               os.path.join(self._current_dir(), 'resources', 'gcp_commands_example.yaml')])
+                                               os.path.join(self._current_dir(), 'resources', 'gcp_commands_example.yaml'),
+                                               'projectid'])
         # Assert
         self.assertEqual(result.exit_code, 0)
         self.assertTrue('/path/to/results' in result.output)
@@ -168,7 +170,8 @@ class TestScan(unittest.TestCase):
         when(dragoneye.cloud_scanner.gcp.gcp_scanner.GcpScanner).scan().thenReturn('/path/to/results')
         # Act
         result = self.runner.invoke(scan_cli, ['gcp',
-                                               os.path.join(self._current_dir(), 'non-existing-file.yaml')])
+                                               os.path.join(self._current_dir(), 'non-existing-file.yaml'),
+                                               'projectid'])
         # Assert
         self.assertEqual(result.exit_code, 1)
         self._assert_invalid_scan_commands_path_exception(result.exception, ['Could not find file: ', 'non-existing-file.yaml'])

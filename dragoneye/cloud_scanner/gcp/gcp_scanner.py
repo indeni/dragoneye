@@ -18,7 +18,7 @@ class GcpScanner(BaseCloudScanner):
     def __init__(self, credentials, settings: GcpCloudScanSettings):
         super().__init__()
         self.credentials = credentials
-        self.settings = settings
+        self.settings: GcpCloudScanSettings = settings
         self.services: list = []
 
     @elapsed_time('Scanning GCP live environment took {} seconds')
@@ -115,8 +115,7 @@ class GcpScanner(BaseCloudScanner):
         self.services.append(service)
         return service
 
-    @staticmethod
-    def _get_parameters(scan_command: dict, account_data_dir: str) -> Optional[List[dict]]:
+    def _get_parameters(self, scan_command: dict, account_data_dir: str) -> Optional[List[dict]]:
         if not scan_command.get('Parameters'):
             return None  # No parameters required
 
@@ -138,7 +137,10 @@ class GcpScanner(BaseCloudScanner):
                         if value not in multi_param_data[param]:
                             multi_param_data[param].append(value)
             else:
-                single_param_data[param_names] = param_real_values
+                if param_dynamic_value == '$project':
+                    single_param_data[param_names] = [self.settings.project_id]
+                else:
+                    single_param_data[param_names] = param_real_values
 
         keys = single_param_data.keys()
         for product in itertools.product(*single_param_data.values()):

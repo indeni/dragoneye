@@ -1,3 +1,7 @@
+# Notes:
+# 1. Results are saved to {ServiceName}-{ApiVersion}-{ResourceType}-{Method}.json
+# 2. In the parameter values, the value '$project' will be replaced by the project_id provided
+
 # https://cloud.google.com/compute/docs/reference/rest/v1/instances/list
 - ServiceName: compute
   ApiVersion: v1
@@ -5,8 +9,7 @@
   Method: list
   Parameters:
     - Name: project
-      Value: dev-tomer
-
+      Value: $project
 
 - ServiceName: compute
   ApiVersion: v1
@@ -14,24 +17,6 @@
   Method: list
   Parameters:
     - Name: project
-      Value: dev-tomer
+      Value: $project
     - Name: zone
-      Value: compute-v1-zones.json|.value[].name
-#
-#- ServiceName: storage
-#  ApiVersion: v1
-#  ResourceType: buckets
-#  Method: get
-#  Parameters:
-#    - Name: bucket
-#      Value: x.json|.names[]
-#
-#- ServiceName: compute
-#  ApiVersion: v1
-#  ResourceType: instances
-#  Method: list
-#  Parameters:
-#    - Name: project zone
-#      Value: x.json|.val[] | .project + " " + .zone
-#    - Name: third
-#      Value: x
+      Value: compute-v1-zones-list.json|.value[].name
