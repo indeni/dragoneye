@@ -2,6 +2,14 @@
 # 1. Results are saved to {ServiceName}-{ApiVersion}-{ResourceType}-{Method}.json
 # 2. In the parameter values, the value '$project' will be replaced by the project_id provided
 
+- ServiceName: cloudresourcemanager
+  ApiVersion: v3
+  ResourceType: projects
+  Method: get
+  Parameters:
+    - Name: name
+      Value: projects/$project
+
 # https://cloud.google.com/compute/docs/reference/rest/v1/instances/list
 - ServiceName: compute
   ApiVersion: v1

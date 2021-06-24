@@ -137,8 +137,8 @@ class GcpScanner(BaseCloudScanner):
                         if value not in multi_param_data[param]:
                             multi_param_data[param].append(value)
             else:
-                if param_dynamic_value == '$project':
-                    single_param_data[param_names] = [self.settings.project_id]
+                if '$project' in param_dynamic_value:
+                    single_param_data[param_names] = [param_dynamic_value.replace('$project', self.settings.project_id)]
                 else:
                     single_param_data[param_names] = param_real_values
 
