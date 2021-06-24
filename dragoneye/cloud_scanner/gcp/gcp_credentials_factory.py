@@ -11,7 +11,9 @@ class GcpCredentialsFactory:
     _SCOPES = [
         # TODO: What other scopes are needed?
         'https://www.googleapis.com/auth/compute.readonly',
-        'https://www.googleapis.com/auth/devstorage.read_only'
+        'https://www.googleapis.com/auth/devstorage.read_only',
+        'https://www.googleapis.com/auth/cloud-platform.read-only',
+        'https://www.googleapis.com/auth/cloudplatformprojects.readonly'
     ]
 
     @classmethod
