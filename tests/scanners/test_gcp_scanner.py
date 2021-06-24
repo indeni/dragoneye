@@ -20,7 +20,8 @@ class TestGcpScanner(unittest.TestCase):
             commands_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'gcp_scan_commands.yaml'),
             account_name=self.account_name,
             should_clean_before_scan=False,
-            output_path=self.temp_dir.name
+            output_path=self.temp_dir.name,
+            project_id='projectid'
         )
         self.credentials = mock()
         self.scanner = GcpScanner(self.credentials, self.gcp_settings)
