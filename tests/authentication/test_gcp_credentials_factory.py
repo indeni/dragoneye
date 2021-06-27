@@ -20,7 +20,7 @@ class TestGcpCredentialsFactory(unittest.TestCase):
         info = {'google_key': 'google_value'}
 
         credentials_mock = mock()
-        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenReturn(None)
+        when(GcpCredentialsFactory)._test_connectivity(credentials_mock).thenReturn(None)
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.service_account.Credentials)\
             .from_service_account_info(info, scopes=GcpCredentialsFactory._SCOPES).thenReturn(credentials_mock)
 
@@ -34,7 +34,7 @@ class TestGcpCredentialsFactory(unittest.TestCase):
         info = {'google_key': 'google_value'}
 
         credentials_mock = mock()
-        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(Exception('My Exception'))
+        when(GcpCredentialsFactory)._test_connectivity(credentials_mock).thenRaise(Exception('My Exception'))
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.service_account.Credentials)\
             .from_service_account_info(info, scopes=GcpCredentialsFactory._SCOPES).thenReturn(credentials_mock)
 
@@ -47,7 +47,7 @@ class TestGcpCredentialsFactory(unittest.TestCase):
         service_account_path = self._get_service_account_path()
 
         credentials_mock = mock()
-        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenReturn(None)
+        when(GcpCredentialsFactory)._test_connectivity(credentials_mock).thenReturn(None)
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.service_account.Credentials)\
             .from_service_account_file(service_account_path, scopes=GcpCredentialsFactory._SCOPES).thenReturn(credentials_mock)
 
@@ -61,7 +61,7 @@ class TestGcpCredentialsFactory(unittest.TestCase):
         service_account_path = self._get_service_account_path()
 
         credentials_mock = mock()
-        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(Exception('My Exception'))
+        when(GcpCredentialsFactory)._test_connectivity(credentials_mock).thenRaise(Exception('My Exception'))
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.service_account.Credentials)\
             .from_service_account_file(service_account_path, scopes=GcpCredentialsFactory._SCOPES).thenReturn(credentials_mock)
 
@@ -72,7 +72,7 @@ class TestGcpCredentialsFactory(unittest.TestCase):
     def test_get_default_credentials_ok(self):
         # Arrange
         credentials_mock = mock()
-        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenReturn(None)
+        when(GcpCredentialsFactory)._test_connectivity(credentials_mock).thenReturn(None)
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.GoogleCredentials)\
             .get_application_default().thenReturn(credentials_mock)
 
@@ -84,7 +84,7 @@ class TestGcpCredentialsFactory(unittest.TestCase):
     def test_get_default_credentials_fail(self):
         # Arrange
         credentials_mock = mock()
-        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(Exception('My Exception'))
+        when(GcpCredentialsFactory)._test_connectivity(credentials_mock).thenRaise(Exception('My Exception'))
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.GoogleCredentials) \
             .get_application_default().thenReturn(credentials_mock)
 
