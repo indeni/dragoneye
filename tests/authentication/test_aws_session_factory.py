@@ -26,7 +26,7 @@ class TestAwsSessionFactory(unittest.TestCase):
                 session_params["profile_name"] = args['profile_name']
 
             session_mock = mock()
-            when(AwsSessionFactory)._test_connectivity(session_mock).thenReturn(None)
+            when(AwsSessionFactory).test_connectivity(session_mock).thenReturn(None)
             when(dragoneye.cloud_scanner.aws.aws_session_factory.boto3).Session(**session_params).thenReturn(session_mock)
 
             # Act
@@ -39,7 +39,7 @@ class TestAwsSessionFactory(unittest.TestCase):
         # Arrange
         session_mock = mock()
         when(dragoneye.cloud_scanner.aws.aws_session_factory.boto3).Session().thenReturn(session_mock)
-        when(AwsSessionFactory)._test_connectivity(session_mock).thenRaise(Exception('My Exception'))
+        when(AwsSessionFactory).test_connectivity(session_mock).thenRaise(Exception('My Exception'))
 
         # Act / Assert
         with self.assertRaisesRegex(Exception, 'My Exception'):
@@ -72,7 +72,7 @@ class TestAwsSessionFactory(unittest.TestCase):
             if region_arg:
                 session_params['region_name'] = region_arg
 
-            when(AwsSessionFactory)._test_connectivity(session_mock).thenReturn(None)
+            when(AwsSessionFactory).test_connectivity(session_mock).thenReturn(None)
             when(dragoneye.cloud_scanner.aws.aws_session_factory.boto3).client('sts').thenReturn(sts_mock)
             when(sts_mock).assume_role(RoleArn=role_arn, RoleSessionName='DragoneyeSession', DurationSeconds=duration_seconds, ExternalId=external_id)\
                 .thenReturn(response)
@@ -111,7 +111,7 @@ class TestAwsSessionFactory(unittest.TestCase):
             if region_arg:
                 session_params['region_name'] = region_arg
 
-            when(AwsSessionFactory)._test_connectivity(session_mock).thenRaise(Exception('My Exception'))
+            when(AwsSessionFactory).test_connectivity(session_mock).thenRaise(Exception('My Exception'))
             when(dragoneye.cloud_scanner.aws.aws_session_factory.boto3).client('sts').thenReturn(sts_mock)
             when(sts_mock).assume_role(RoleArn=role_arn, RoleSessionName='DragoneyeSession', DurationSeconds=duration_seconds, ExternalId=external_id)\
                 .thenReturn(response)

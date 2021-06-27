@@ -24,7 +24,7 @@ class GcpCredentialsFactory:
         credentials = service_account.Credentials.from_service_account_info(
             service_account_info, scopes=cls._SCOPES)
 
-        cls._test_connectivity(credentials)
+        cls.test_connectivity(credentials)
         logger.info('Generated credentials successfully')
         return credentials
 
@@ -33,7 +33,7 @@ class GcpCredentialsFactory:
         logger.info('Will try to generate the default credentials...')
         credentials = GoogleCredentials.get_application_default()
 
-        cls._test_connectivity(credentials)
+        cls.test_connectivity(credentials)
         logger.info('Generated credentials successfully')
         return credentials
 
@@ -43,12 +43,12 @@ class GcpCredentialsFactory:
         credentials = service_account.Credentials.from_service_account_file(
             service_account_file, scopes=cls._SCOPES)
 
-        cls._test_connectivity(credentials)
+        cls.test_connectivity(credentials)
         logger.info('Generated credentials successfully')
         return credentials
 
     @staticmethod
-    def _test_connectivity(credentials):
+    def test_connectivity(credentials):
         with build('compute', 'v1', credentials=credentials) as service:
             try:
                 service.instances().get(project='abc', zone='us-east1-a', instance='abc').execute()
