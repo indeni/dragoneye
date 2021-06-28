@@ -22,7 +22,7 @@ class TestGcpCredentialsFactory(unittest.TestCase):
         credentials_mock = mock()
         when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenReturn(None)
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.service_account.Credentials)\
-            .from_service_account_info(info, scopes=GcpCredentialsFactory._SCOPES).thenReturn(credentials_mock)
+            .from_service_account_info(info).thenReturn(credentials_mock)
 
         # Act
         credentials = GcpCredentialsFactory.from_service_account_info(info)
@@ -36,7 +36,7 @@ class TestGcpCredentialsFactory(unittest.TestCase):
         credentials_mock = mock()
         when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(Exception('My Exception'))
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.service_account.Credentials)\
-            .from_service_account_info(info, scopes=GcpCredentialsFactory._SCOPES).thenReturn(credentials_mock)
+            .from_service_account_info(info).thenReturn(credentials_mock)
 
         # Act / Assert
         with self.assertRaisesRegex(Exception, 'My Exception'):
@@ -49,7 +49,7 @@ class TestGcpCredentialsFactory(unittest.TestCase):
         credentials_mock = mock()
         when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenReturn(None)
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.service_account.Credentials)\
-            .from_service_account_file(service_account_path, scopes=GcpCredentialsFactory._SCOPES).thenReturn(credentials_mock)
+            .from_service_account_file(service_account_path).thenReturn(credentials_mock)
 
         # Act
         credentials = GcpCredentialsFactory.from_service_account_file(service_account_path)
@@ -63,7 +63,7 @@ class TestGcpCredentialsFactory(unittest.TestCase):
         credentials_mock = mock()
         when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(Exception('My Exception'))
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.service_account.Credentials)\
-            .from_service_account_file(service_account_path, scopes=GcpCredentialsFactory._SCOPES).thenReturn(credentials_mock)
+            .from_service_account_file(service_account_path).thenReturn(credentials_mock)
 
         # Act / Assert
         with self.assertRaisesRegex(Exception, 'My Exception'):
