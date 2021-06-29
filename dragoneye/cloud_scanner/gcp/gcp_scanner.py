@@ -9,52 +9,46 @@ from googleapiclient.errors import HttpError
 
 from dragoneye.cloud_scanner.base_cloud_scanner import BaseCloudScanner
 from dragoneye.cloud_scanner.gcp.gcp_scan_settings import GcpCloudScanSettings
-from dragoneye.utils.misc_utils import elapsed_time, load_yaml, init_directory, custom_serializer, get_dynamic_values_from_files
+from dragoneye.config import config
+from dragoneye.utils.misc_utils import elapsed_time, init_directory, custom_serializer, get_dynamic_values_from_files
 from dragoneye.utils.threading_utils import ThreadedFunctionData, execute_parallel_functions_in_threads
 from dragoneye.utils.app_logger import logger
 
 
 class GcpScanner(BaseCloudScanner):
     def __init__(self, credentials, settings: GcpCloudScanSettings):
-        super().__init__()
+        super().__init__(settings)
         self.credentials = credentials
-        self.settings: GcpCloudScanSettings = settings
         self.services: list = []
+        self.project_id = settings.project_id
 
     @elapsed_time('Scanning GCP live environment took {} seconds')
     def scan(self) -> str:
-        scan_commands = load_yaml(self.settings.commands_path)
         self.account_data_dir = init_directory(self.settings.output_path, self.settings.account_name, self.settings.clean)
 
-        dependable_commands = []
-        non_dependable_commands = []
-        for command in scan_commands:
-            if "Parameters" in command:
-                dependable_commands.append(command)
-            else:
-                non_dependable_commands.append(command)
+        dependent_commands, independent_commands = self._get_scan_commands()
 
         non_dependable_tasks: List[ThreadedFunctionData] = []
         dependable_tasks: List[ThreadedFunctionData] = []
         deque_tasks: Deque[List[ThreadedFunctionData]] = collections.deque()
 
-        for non_dependable_command in non_dependable_commands:
+        for independent_command in independent_commands:
             non_dependable_tasks.append(ThreadedFunctionData(
                 self._execute_scan_commands,
-                (non_dependable_command,),
-                'exception on command {}'.format(non_dependable_command)))
+                (independent_command,),
+                'exception on command {}'.format(independent_command)))
 
         deque_tasks.append(non_dependable_tasks)
 
-        for dependable_command in dependable_commands:
+        for dependent_command in dependent_commands:
             dependable_tasks.append(ThreadedFunctionData(
                 self._execute_scan_commands,
-                (dependable_command,),
-                'exception on command {}'.format(dependable_command)))
+                (dependent_command,),
+                'exception on command {}'.format(dependent_command)))
 
         for dependable_task in dependable_tasks:
             deque_tasks.append([dependable_task])
-        execute_parallel_functions_in_threads(deque_tasks, 20)
+        execute_parallel_functions_in_threads(deque_tasks, config.get('MAX_WORKERS'))
 
         self._print_summary()
 
@@ -128,6 +122,7 @@ class GcpScanner(BaseCloudScanner):
             param_names = parameter['Name']
             param_dynamic_value = parameter['Value']
             param_real_values = get_dynamic_values_from_files(param_dynamic_value, account_data_dir)
+            # Multiple parameters from same object
             if ' ' in param_names:
                 for param_real_value in param_real_values:
                     zipped = zip(param_names.split(' '), param_real_value.split(' '))
@@ -136,9 +131,10 @@ class GcpScanner(BaseCloudScanner):
                             multi_param_data[param] = []
                         if value not in multi_param_data[param]:
                             multi_param_data[param].append(value)
+            # One parameter from same object
             else:
                 if '$project' in param_dynamic_value:
-                    single_param_data[param_names] = [param_dynamic_value.replace('$project', self.settings.project_id)]
+                    single_param_data[param_names] = [param_dynamic_value.replace('$project', self.project_id)]
                 else:
                     single_param_data[param_names] = param_real_values
 

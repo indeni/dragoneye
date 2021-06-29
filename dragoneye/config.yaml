@@ -1,0 +1,2 @@
+# The maximum amount of threads that can run in parallel when performing scans in parallel
+MAX_WORKERS: 20

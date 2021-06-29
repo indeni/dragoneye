@@ -14,10 +14,11 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 from botocore.config import Config
 
 from dragoneye.cloud_scanner.aws.aws_scan_settings import AwsCloudScanSettings
+from dragoneye.config import config
 from dragoneye.utils.boto_backoff import rate_limiter
 from dragoneye.cloud_scanner.base_cloud_scanner import BaseCloudScanner
 from dragoneye.utils.app_logger import logger
-from dragoneye.utils.misc_utils import get_dynamic_values_from_files, custom_serializer, make_directory, init_directory, load_yaml, snakecase, \
+from dragoneye.utils.misc_utils import get_dynamic_values_from_files, custom_serializer, make_directory, init_directory, snakecase, \
     elapsed_time
 from dragoneye.utils.threading_utils import execute_parallel_functions_in_threads, ThreadedFunctionData
 
@@ -27,7 +28,7 @@ MAX_RETRIES = 3
 class AwsScanner(BaseCloudScanner):
 
     def __init__(self, session, settings: AwsCloudScanSettings):
-        super().__init__()
+        super().__init__(settings)
         self.session = session
         self.settings = settings
         # Services that will only be queried in the default region
@@ -51,16 +52,16 @@ class AwsScanner(BaseCloudScanner):
 
     @elapsed_time('Scanning AWS live environment took {} seconds')
     def scan(self) -> str:
-        scan_commands = load_yaml(self.settings.commands_path)
         self.account_data_dir = init_directory(self.settings.output_path, self.settings.account_name, self.settings.clean)
         region_dict_list = self._create_regions_file_structure()
+        dependent_commands, independent_commands = self._get_scan_commands()
 
         tasks: List[ThreadedFunctionData] = []
 
         for region in region_dict_list:
             tasks.append(ThreadedFunctionData(
                 self._scan_region_data,
-                (region, scan_commands),
+                (region, dependent_commands, independent_commands),
                 'An unknown exception has occurred'
             ))
 
@@ -387,38 +388,30 @@ class AwsScanner(BaseCloudScanner):
 
         deque_tasks: Deque[List[ThreadedFunctionData]] = collections.deque()
         deque_tasks.append(tasks)
-        execute_parallel_functions_in_threads(deque_tasks, 20, self.settings.command_timeout)
+        execute_parallel_functions_in_threads(deque_tasks, config.get('MAX_WORKERS'), self.settings.command_timeout)
 
-    def _scan_region_data(self, region, scan_commands: List[dict]):
-        dependable_commands = []
-        non_dependable_commands = []
-        for command in scan_commands:
-            if "Parameters" in command:
-                dependable_commands.append(command)
-            else:
-                non_dependable_commands.append(command)
-
+    def _scan_region_data(self, region: dict, dependent_commands: List[dict], independent_commands: List[dict]):
         non_dependable_tasks: List[ThreadedFunctionData] = []
         dependable_tasks: List[ThreadedFunctionData] = []
         deque_tasks: Deque[List[ThreadedFunctionData]] = collections.deque()
 
-        for non_dependable_command in non_dependable_commands:
+        for independent_command in independent_commands:
             non_dependable_tasks.append(ThreadedFunctionData(
                 self._run_scan_commands,
-                (region, non_dependable_command),
-                'exception on command {}'.format(non_dependable_command)))
+                (region, independent_command),
+                'exception on command {}'.format(independent_command)))
 
         deque_tasks.append(non_dependable_tasks)
 
-        for dependable_command in dependable_commands:
+        for dependent_command in dependent_commands:
             dependable_tasks.append(ThreadedFunctionData(
                 self._run_scan_commands,
-                (region, dependable_command),
-                'exception on command {}'.format(dependable_command)))
+                (region, dependent_command),
+                'exception on command {}'.format(dependent_command)))
 
         for dependable_task in dependable_tasks:
             deque_tasks.append([dependable_task])
-        execute_parallel_functions_in_threads(deque_tasks, 20)
+        execute_parallel_functions_in_threads(deque_tasks, config.get('MAX_WORKERS'))
 
     @staticmethod
     def _get_call_parameters(call_parameters: dict, parameters_def: list) -> List[dict]:

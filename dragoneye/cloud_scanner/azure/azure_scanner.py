@@ -8,8 +8,8 @@ from requests import Response
 
 from dragoneye.cloud_scanner.azure.azure_scan_settings import AzureCloudScanSettings
 from dragoneye.cloud_scanner.base_cloud_scanner import BaseCloudScanner
-from dragoneye.utils.misc_utils import elapsed_time, invoke_get_request, init_directory, load_yaml, get_dynamic_values_from_files, \
-    custom_serializer
+from dragoneye.config import config
+from dragoneye.utils.misc_utils import elapsed_time, invoke_get_request, init_directory, get_dynamic_values_from_files, custom_serializer
 from dragoneye.utils.app_logger import logger
 from dragoneye.utils.threading_utils import ThreadedFunctionData, execute_parallel_functions_in_threads
 
@@ -17,59 +17,48 @@ from dragoneye.utils.threading_utils import ThreadedFunctionData, execute_parall
 class AzureScanner(BaseCloudScanner):
 
     def __init__(self, auth_header: str, settings: AzureCloudScanSettings):
-        super().__init__()
+        super().__init__(settings)
         self.auth_header = auth_header
-        self.settings = settings
+        self.subscription_id = settings.subscription_id
 
     @elapsed_time('Scanning Azure live environment took {} seconds')
     def scan(self) -> str:
-        settings = self.settings
-        subscription_id = self.settings.subscription_id
-        account_name = settings.account_name
-
         headers = {
             'Authorization': self.auth_header
         }
 
-        self.account_data_dir = init_directory(settings.output_path, account_name, settings.clean)
-        scan_commands = load_yaml(settings.commands_path)
-        resource_groups = self._get_resource_groups(headers, subscription_id)
+        self.account_data_dir = init_directory(self.settings.output_path, self.settings.account_name, self.settings.clean)
+        resource_groups = self._get_resource_groups(headers)
 
-        dependable_commands = []
-        non_dependable_commands = []
-        for command in scan_commands:
-            if "Parameters" in command:
-                dependable_commands.append(command)
-            else:
-                non_dependable_commands.append(command)
+        dependent_commands, independent_commands = self._get_scan_commands()
 
         non_dependable_tasks: List[ThreadedFunctionData] = []
         dependable_tasks: List[ThreadedFunctionData] = []
         deque_tasks: Deque[List[ThreadedFunctionData]] = collections.deque()
 
-        for non_dependable_command in non_dependable_commands:
+        for independent_command in independent_commands:
             non_dependable_tasks.append(ThreadedFunctionData(
                 self._execute_scan_commands,
-                (non_dependable_command, subscription_id, headers, resource_groups),
-                'exception on command {}'.format(non_dependable_command)))
+                (independent_command, headers, resource_groups),
+                'exception on command {}'.format(independent_command)))
 
         deque_tasks.append(non_dependable_tasks)
 
-        for dependable_command in dependable_commands:
+        for dependent_command in dependent_commands:
             dependable_tasks.append(ThreadedFunctionData(
                 self._execute_scan_commands,
-                (dependable_command, subscription_id, headers, resource_groups),
-                'exception on command {}'.format(dependable_command)))
+                (dependent_command, headers, resource_groups),
+                'exception on command {}'.format(dependent_command)))
 
         for dependable_task in dependable_tasks:
             deque_tasks.append([dependable_task])
-        execute_parallel_functions_in_threads(deque_tasks, 20)
+        execute_parallel_functions_in_threads(deque_tasks, config.get('MAX_WORKERS'))
 
         self._print_summary()
 
         return os.path.abspath(os.path.join(self.account_data_dir, '..'))
 
-    def _execute_scan_commands(self, scan_command: dict, subscription_id: str, headers: dict, resource_groups: List[str]) -> None:
+    def _execute_scan_commands(self, scan_command: dict, headers: dict, resource_groups: List[str]) -> None:
         try:
             output_file = self._get_result_file_path(self.account_data_dir, scan_command['Name'])
             if os.path.isfile(output_file):
@@ -79,7 +68,7 @@ class AzureScanner(BaseCloudScanner):
 
             request = scan_command['Request']
             parameters = scan_command.get('Parameters', [])
-            base_url = request.replace('{subscriptionId}', subscription_id)
+            base_url = request.replace('{subscriptionId}', self.subscription_id)
             results = self._get_results(base_url, headers, parameters, self.account_data_dir, resource_groups)
             self._save_result(results, output_file)
             for url in results['urls']:
@@ -156,8 +145,8 @@ class AzureScanner(BaseCloudScanner):
                 else:
                     results['value'].append(result)
 
-    def _get_resource_groups(self, headers: dict, subscription_id: str) -> List[str]:
-        url = f'https://management.azure.com/subscriptions/{subscription_id}/resourcegroups?api-version=2020-09-01'
+    def _get_resource_groups(self, headers: dict) -> List[str]:
+        url = f'https://management.azure.com/subscriptions/{self.subscription_id}/resourcegroups?api-version=2020-09-01'
         results = self._get_results(url, headers, [], self.account_data_dir, [])
         output_file = self._get_result_file_path(self.account_data_dir, 'resource-groups')
         self._save_result(results, output_file)
