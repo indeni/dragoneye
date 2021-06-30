@@ -61,8 +61,6 @@ def safe_cli_entry_point():
               default=None)
 def gcp(scan_commands_path: str, project_id: str, clean: bool, output_path: str, cloud_account_name: str, credentials_path: Optional[str]):
     validate_path(scan_commands_path, f'Could not find file: {scan_commands_path}')
-    if credentials_path:
-        validate_path(credentials_path)
 
     gcp_scan_settings = GcpCloudScanSettings(commands_path=scan_commands_path,
                                              account_name=cloud_account_name,
@@ -70,6 +68,7 @@ def gcp(scan_commands_path: str, project_id: str, clean: bool, output_path: str,
                                              should_clean_before_scan=clean,
                                              project_id=project_id)
     if credentials_path:
+        validate_path(credentials_path, f'Could not find file: {credentials_path}')
         credentials = GcpCredentialsFactory.from_service_account_file(credentials_path)
     else:
         credentials = GcpCredentialsFactory.get_default_credentials()

@@ -2,6 +2,7 @@
 - ServiceName: compute
   ApiVersion: v1
   ResourceType: zones
+  Method: list
   Parameters:
     - Name: project
       Value: dev-tomer
