@@ -98,10 +98,10 @@ class GcpScanner(BaseCloudScanner):
 
         for call_summary in all_call_summary:
             self.summary.put_nowait(call_summary)
-            if 'error' in call_summary:
-                print(self._parse_error(call_summary))
+            if any(x in call_summary for x in ('error', 'exception')):
+                logger.error(self._parse_error(call_summary))
             else:
-                print(f'Results from {self._get_call_representation(call_summary)} were saved to {output_file}')
+                logger.info(f'Results from {self._get_call_representation(call_summary)} were saved to {output_file}')
 
     @lru_cache(maxsize=None)
     def _create_service(self, service_name: str, version: str):

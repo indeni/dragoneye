@@ -2,6 +2,7 @@ from google.auth.exceptions import RefreshError
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from oauth2client.client import GoogleCredentials
+from google.auth import impersonated_credentials
 
 from dragoneye.dragoneye_exception import DragoneyeException
 from dragoneye.utils.app_logger import logger
@@ -37,6 +38,21 @@ class GcpCredentialsFactory:
         logger.info('Generated credentials successfully')
         return credentials
 
+    @classmethod
+    def impersonate(cls, credentials, email, scopes):
+        """
+        Creates and returns impersonated credentials.
+        :param credentials: The credentials of the source service account
+        :param email: The email address of the target service account
+        :param scopes: The scopes of the created credentials
+        :return: An impersonated credentials instance
+        """
+        credentials = impersonated_credentials.Credentials(source_credentials=credentials,
+                                                           target_principal=email,
+                                                           target_scopes=scopes)
+        cls.test_connectivity(credentials)
+        return credentials
+
     @staticmethod
     def test_connectivity(credentials):
         with build('compute', 'v1', credentials=credentials) as service:
@@ -44,5 +60,5 @@ class GcpCredentialsFactory:
                 service.instances().get(project='abc', zone='us-east1-a', instance='abc').execute()
             except RefreshError as ex:
                 raise DragoneyeException('Unable to invoke GCP API with given credentials', str(ex))
-            except Exception:
+            except Exception as ex:
                 pass
