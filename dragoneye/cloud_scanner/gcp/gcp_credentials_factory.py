@@ -1,8 +1,8 @@
 from google.auth.exceptions import RefreshError
 from google.oauth2 import service_account
+from google.auth import impersonated_credentials
 from googleapiclient.discovery import build
 from oauth2client.client import GoogleCredentials
-from google.auth import impersonated_credentials
 
 from dragoneye.dragoneye_exception import DragoneyeException
 from dragoneye.utils.app_logger import logger

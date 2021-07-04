@@ -91,3 +91,32 @@ class TestGcpCredentialsFactory(unittest.TestCase):
         # Act / Assert
         with self.assertRaisesRegex(Exception, 'My Exception'):
             GcpCredentialsFactory.get_default_credentials()
+
+    def test_impersonate_ok(self):
+        # Arrange
+        source_credentials_mock = mock()
+        target_credentials_mock = mock()
+        email = 'sa_test@google.com'
+
+        when(GcpCredentialsFactory).test_connectivity(target_credentials_mock).thenReturn(None)
+        when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.impersonated_credentials) \
+            .Credentials(source_credentials=source_credentials_mock, target_principal=email, target_scopes=[]).thenReturn(target_credentials_mock)
+
+        # Act
+        credentials = GcpCredentialsFactory.impersonate(source_credentials_mock, email, [])
+        # Assert
+        self.assertEqual(credentials, target_credentials_mock)
+
+    def test_impersonate_fail(self):
+        # Arrange
+        source_credentials_mock = mock()
+        target_credentials_mock = mock()
+        email = 'sa_test@google.com'
+
+        when(GcpCredentialsFactory).test_connectivity(target_credentials_mock).thenRaise(Exception('My Exception'))
+        when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.impersonated_credentials) \
+            .Credentials(source_credentials=source_credentials_mock, target_principal=email, target_scopes=[]).thenReturn(target_credentials_mock)
+
+        # Act / Assert
+        with self.assertRaisesRegex(Exception, 'My Exception'):
+            GcpCredentialsFactory.impersonate(source_credentials_mock, email, [])
