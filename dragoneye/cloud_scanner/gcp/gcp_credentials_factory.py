@@ -1,6 +1,8 @@
+from typing import Sequence
+
 from google.auth.exceptions import RefreshError
 from google.oauth2 import service_account
-from google.auth import impersonated_credentials
+from google.auth import impersonated_credentials, aws
 from googleapiclient.discovery import build
 from oauth2client.client import GoogleCredentials
 
@@ -39,7 +41,7 @@ class GcpCredentialsFactory:
         return credentials
 
     @classmethod
-    def impersonate(cls, credentials, email, scopes):
+    def impersonate(cls, credentials, email: str, scopes: Sequence[str]):
         """
         Creates and returns impersonated credentials.
         :param credentials: The credentials of the source service account
@@ -52,6 +54,18 @@ class GcpCredentialsFactory:
                                                            target_scopes=scopes)
         cls.test_connectivity(credentials)
         return credentials
+
+    @classmethod
+    def from_aws_credentials_config_info(cls, info: dict):
+        cred = aws.Credentials.from_info(info)
+        cls.test_connectivity(cred)
+        return cred
+
+    @classmethod
+    def from_aws_credentials_config_file(cls, config_file_path: str):
+        cred = aws.Credentials.from_file(config_file_path)
+        cls.test_connectivity(cred)
+        return cred
 
     @staticmethod
     def test_connectivity(credentials):
