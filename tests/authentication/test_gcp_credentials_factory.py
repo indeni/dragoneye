@@ -5,6 +5,7 @@ from mockito import unstub, when, mock
 
 import dragoneye
 from dragoneye.cloud_scanner.gcp.gcp_credentials_factory import GcpCredentialsFactory
+from dragoneye.dragoneye_exception import DragoneyeException
 
 
 class TestGcpCredentialsFactory(unittest.TestCase):
@@ -34,12 +35,12 @@ class TestGcpCredentialsFactory(unittest.TestCase):
         info = {'google_key': 'google_value'}
 
         credentials_mock = mock()
-        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(Exception('My Exception'))
+        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(DragoneyeException('My Dragoneye Exception'))
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.service_account.Credentials)\
             .from_service_account_info(info).thenReturn(credentials_mock)
 
         # Act / Assert
-        with self.assertRaisesRegex(Exception, 'My Exception'):
+        with self.assertRaisesRegex(DragoneyeException, 'My Dragoneye Exception'):
             GcpCredentialsFactory.from_service_account_info(info)
 
     def test_from_service_file_ok(self):
@@ -61,12 +62,12 @@ class TestGcpCredentialsFactory(unittest.TestCase):
         service_account_path = self._get_service_account_path()
 
         credentials_mock = mock()
-        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(Exception('My Exception'))
+        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(DragoneyeException('My Dragoneye Exception'))
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.service_account.Credentials)\
             .from_service_account_file(service_account_path).thenReturn(credentials_mock)
 
         # Act / Assert
-        with self.assertRaisesRegex(Exception, 'My Exception'):
+        with self.assertRaisesRegex(DragoneyeException, 'My Dragoneye Exception'):
             GcpCredentialsFactory.from_service_account_file(service_account_path)
 
     def test_get_default_credentials_ok(self):
@@ -84,12 +85,12 @@ class TestGcpCredentialsFactory(unittest.TestCase):
     def test_get_default_credentials_fail(self):
         # Arrange
         credentials_mock = mock()
-        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(Exception('My Exception'))
+        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(DragoneyeException('My Dragoneye Exception'))
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.GoogleCredentials) \
             .get_application_default().thenReturn(credentials_mock)
 
         # Act / Assert
-        with self.assertRaisesRegex(Exception, 'My Exception'):
+        with self.assertRaisesRegex(DragoneyeException, 'My Dragoneye Exception'):
             GcpCredentialsFactory.get_default_credentials()
 
     def test_impersonate_ok(self):
@@ -113,10 +114,64 @@ class TestGcpCredentialsFactory(unittest.TestCase):
         target_credentials_mock = mock()
         email = 'sa_test@google.com'
 
-        when(GcpCredentialsFactory).test_connectivity(target_credentials_mock).thenRaise(Exception('My Exception'))
+        when(GcpCredentialsFactory).test_connectivity(target_credentials_mock).thenRaise(DragoneyeException('My Dragoneye Exception'))
         when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.impersonated_credentials) \
             .Credentials(source_credentials=source_credentials_mock, target_principal=email, target_scopes=[]).thenReturn(target_credentials_mock)
 
         # Act / Assert
-        with self.assertRaisesRegex(Exception, 'My Exception'):
+        with self.assertRaisesRegex(DragoneyeException, 'My Dragoneye Exception'):
             GcpCredentialsFactory.impersonate(source_credentials_mock, email, [])
+
+    def test_aws_credentials_config_file_ok(self):
+        # Arrange
+        credentials_mock = mock()
+        config_path = 'filepath.json'
+
+        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenReturn(None)
+        when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.aws.Credentials) \
+            .from_file(config_path).thenReturn(credentials_mock)
+
+        # Act
+        credentials = GcpCredentialsFactory.from_aws_credentials_config_file(config_path)
+        # Assert
+        self.assertEqual(credentials, credentials_mock)
+
+    def test_aws_credentials_config_file_fail(self):
+        # Arrange
+        credentials_mock = mock()
+        config_path = 'filepath.json'
+
+        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(DragoneyeException('My Dragoneye Exception'))
+        when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.aws.Credentials) \
+            .from_file(config_path).thenReturn(credentials_mock)
+
+        # Act / Assert
+        with self.assertRaisesRegex(DragoneyeException, 'My Dragoneye Exception'):
+            GcpCredentialsFactory.from_aws_credentials_config_file(config_path)
+
+    def test_aws_credentials_config_info_ok(self):
+        # Arrange
+        credentials_mock = mock()
+        config_info = {'google_key': 'google_value'}
+
+        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenReturn(None)
+        when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.aws.Credentials) \
+            .from_info(config_info).thenReturn(credentials_mock)
+
+        # Act
+        credentials = GcpCredentialsFactory.from_aws_credentials_config_info(config_info)
+        # Assert
+        self.assertEqual(credentials, credentials_mock)
+
+    def test_aws_credentials_config_info_fail(self):
+        # Arrange
+        credentials_mock = mock()
+        config_info = {'google_key': 'google_value'}
+
+        when(GcpCredentialsFactory).test_connectivity(credentials_mock).thenRaise(DragoneyeException('My Dragoneye Exception'))
+        when(dragoneye.cloud_scanner.gcp.gcp_credentials_factory.aws.Credentials) \
+            .from_info(config_info).thenReturn(credentials_mock)
+
+        # Act / Assert
+        with self.assertRaisesRegex(DragoneyeException, 'My Dragoneye Exception'):
+            GcpCredentialsFactory.from_aws_credentials_config_info(config_info)

@@ -80,5 +80,5 @@ class GcpCredentialsFactory:
                 service.instances().get(project='abc', zone='us-east1-a', instance='abc').execute()
             except RefreshError as ex:
                 raise DragoneyeException('Unable to invoke GCP API with given credentials', str(ex))
-            except Exception as ex:
+            except Exception:
                 pass
