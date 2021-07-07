@@ -27,6 +27,8 @@ setup(
     author_email='engineering@indeni.com',
     url='https://github.com/indeni/dragoneye',
     packages=find_packages(include=[project_name, f'{project_name}.*']),
+    package_data={'': ['config.yaml']},
+    include_package_data=True,
     keywords=['cloud', 'aws', 'azure', 'scan'],
     install_requires=requirements,
     entry_points={
