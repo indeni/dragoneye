@@ -1,0 +1,40 @@
+- ServiceName: service
+  ApiVersion: v1
+  ResourceType: resource1
+  Method: list
+
+- ServiceName: service
+  ApiVersion: v1
+  ResourceType: resource2
+  Method: get
+  Parameters:
+    - Name: param1
+      Value: service-v1-resource1-list.json | .value[].param1
+
+- ServiceName: service
+  ApiVersion: v1
+  ResourceType: resource3
+  Method: get
+  Parameters:
+    - Name: param1 param2
+      Value: service-v1-resource1-list.json | .value[] | .param1 + " " + .param2
+
+- ServiceName: service
+  ApiVersion: v1
+  ResourceType: resource4
+  Method: get
+  Parameters:
+    - Name: param1
+      Value: service-v1-resource1-list.json | .value[].param1
+    - Name: param2
+      Value: service-v1-resource1-list.json | .value[].param2
+
+- ServiceName: service
+  ApiVersion: v1
+  ResourceType: resource5
+  Method: get
+  Parameters:
+    - Name: param1 param2
+      Value: service-v1-resource1-list.json | .value[] | .param1 + " " + .param2
+    - Name: param3
+      Value: service-v1-resource1-list.json | .value[].param3

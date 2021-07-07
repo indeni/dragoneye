@@ -7,7 +7,6 @@ import re
 import json
 import time
 from functools import lru_cache
-from queue import Queue
 from typing import List, Dict, Optional, Deque
 
 import urllib.parse
@@ -15,10 +14,11 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 from botocore.config import Config
 
 from dragoneye.cloud_scanner.aws.aws_scan_settings import AwsCloudScanSettings
+from dragoneye.config import config
 from dragoneye.utils.boto_backoff import rate_limiter
 from dragoneye.cloud_scanner.base_cloud_scanner import BaseCloudScanner
 from dragoneye.utils.app_logger import logger
-from dragoneye.utils.misc_utils import get_dynamic_values_from_files, custom_serializer, make_directory, init_directory, load_yaml, snakecase, \
+from dragoneye.utils.misc_utils import get_dynamic_values_from_files, custom_serializer, make_directory, init_directory, snakecase, \
     elapsed_time
 from dragoneye.utils.threading_utils import execute_parallel_functions_in_threads, ThreadedFunctionData
 
@@ -28,6 +28,7 @@ MAX_RETRIES = 3
 class AwsScanner(BaseCloudScanner):
 
     def __init__(self, session, settings: AwsCloudScanSettings):
+        super().__init__(settings)
         self.session = session
         self.settings = settings
         # Services that will only be queried in the default region
@@ -40,7 +41,7 @@ class AwsScanner(BaseCloudScanner):
             "cloudfront",
             "organizations",
         ]
-        self.scan_commands = None
+
         self.default_region = settings.default_region or self.session.region_name
         if self.default_region is None:
             raise ValueError('Default region cannot be empty. '
@@ -51,17 +52,16 @@ class AwsScanner(BaseCloudScanner):
 
     @elapsed_time('Scanning AWS live environment took {} seconds')
     def scan(self) -> str:
-        self.scan_commands = load_yaml(self.settings.commands_path)
-        account_data_dir = init_directory(self.settings.output_path, self.settings.account_name, self.settings.clean)
-        region_dict_list = self._create_regions_file_structure(account_data_dir)
+        self.account_data_dir = init_directory(self.settings.output_path, self.settings.account_name, self.settings.clean)
+        region_dict_list = self._create_regions_file_structure()
+        dependent_commands, independent_commands = self._get_scan_commands()
 
-        summary: Queue = Queue()
         tasks: List[ThreadedFunctionData] = []
 
         for region in region_dict_list:
             tasks.append(ThreadedFunctionData(
                 self._scan_region_data,
-                (region, account_data_dir, summary),
+                (region, dependent_commands, independent_commands),
                 'An unknown exception has occurred'
             ))
 
@@ -69,21 +69,21 @@ class AwsScanner(BaseCloudScanner):
         deque_tasks.append(tasks)
         execute_parallel_functions_in_threads(deque_tasks, len(region_dict_list))
 
-        self._print_summary(summary, os.path.join(account_data_dir, '..'))
+        self._print_summary()
 
-        return os.path.abspath(os.path.join(account_data_dir, '..'))
+        return os.path.abspath(os.path.join(self.account_data_dir, '..'))
 
-    def _create_regions_file_structure(self, base_path: str):
+    def _create_regions_file_structure(self):
         region_list = self._get_region_list()
 
-        with open(f"{base_path}/describe-regions.json", "w+") as file:
+        with open(f"{self.account_data_dir}/describe-regions.json", "w+") as file:
             file.write(json.dumps(region_list, indent=4, sort_keys=True))
 
         logger.info("* Creating directory for each region name")
         region_dict_list: List[dict] = region_list["Regions"]
 
         for region in region_dict_list:
-            make_directory(os.path.join(base_path, region.get("RegionName", "Unknown")))
+            make_directory(os.path.join(self.account_data_dir, region.get("RegionName", "Unknown")))
 
         return region_dict_list
 
@@ -104,28 +104,6 @@ class AwsScanner(BaseCloudScanner):
             region_list["Regions"] = filtered_regions
 
         return region_list
-
-    @staticmethod
-    def _print_summary(summary: Queue, directory: str):
-        logger.info("--------------------------------------------------------------------")
-        failures = []
-        for call_summary in summary.queue:
-            if "exception" in call_summary:
-                failures.append(call_summary)
-        logger.info("Summary: {} APIs called. {} errors".format(len(summary.queue), len(failures)))
-        if len(failures) > 0:
-            logger.warning("Failures:")
-            for call_summary in failures:
-                logger.warning(
-                    "  {}.{}({}): {}".format(
-                        call_summary["service"],
-                        call_summary["action"],
-                        call_summary["parameters"],
-                        call_summary["exception"],
-                    )
-                )
-        AwsScanner._write_failures_report(directory, failures)
-
 
     @staticmethod
     def _get_identifier_from_parameter(parameter):
@@ -154,8 +132,7 @@ class AwsScanner(BaseCloudScanner):
 
         return urllib.parse.quote_plus(filename)
 
-    @staticmethod
-    def _get_and_save_data(output_file, handler, method_to_call, parameters, checks, region, summary: Queue):
+    def _get_and_save_data(self, output_file, handler, method_to_call, parameters, checks, region):
         """
         Calls the AWS API function and downloads the data
 
@@ -184,7 +161,7 @@ class AwsScanner(BaseCloudScanner):
         AwsScanner._save_results_to_file(output_file, data)
 
         logger.info(f'Results from {function_msg} were saved to {output_file}')
-        summary.put_nowait(call_summary)
+        self.summary.put_nowait(call_summary)
 
     @staticmethod
     def _get_data(output_file, handler, method_to_call, parameters, checks, call_summary):
@@ -346,7 +323,7 @@ class AwsScanner(BaseCloudScanner):
                     json.dumps(data, indent=4, sort_keys=True, default=custom_serializer)
                 )
 
-    def _run_scan_commands(self, region, runner, account_dir, summary: Queue):
+    def _run_scan_commands(self, region, runner):
         region = copy.deepcopy(region)
         runner = copy.deepcopy(runner)
         region_name = region["RegionName"]
@@ -370,11 +347,11 @@ class AwsScanner(BaseCloudScanner):
             config=self.handler_config
         )
 
-        filepath = os.path.join(account_dir, region_name, f'{runner["Service"]}-{runner["Request"]}')
+        filepath = os.path.join(self.account_data_dir, region_name, f'{runner["Service"]}-{runner["Request"]}')
 
         method_to_call = snakecase(runner["Request"])
         parameter_keys = set()
-        param_groups = self._get_parameter_group(runner, account_dir, region, parameter_keys)
+        param_groups = self._get_parameter_group(runner, self.account_data_dir, region, parameter_keys)
 
         tasks: List[ThreadedFunctionData] = []
 
@@ -388,61 +365,53 @@ class AwsScanner(BaseCloudScanner):
                 output_file = f"{filepath}/{file_name}.json"
                 tasks.append(ThreadedFunctionData(
                     AwsScanner._get_and_save_data,
-                    (output_file,
+                    (self,
+                     output_file,
                      handler,
                      method_to_call,
                      param_group,
                      runner.get("Check", None),
-                     region_name,
-                     summary),
+                     region_name),
                     'exception on command {}'.format(runner),
                     'timeout on command {}'.format(runner)))
         else:
             output_file = filepath + ".json"
             tasks.append(ThreadedFunctionData(
                 AwsScanner._get_and_save_data,
-                (output_file,
+                (self,
+                 output_file,
                  handler,
                  method_to_call,
                  {},
                  runner.get("Check", None),
-                 region_name,
-                 summary), 'exception on command {}'.format(runner), 'timeout on command {}'.format(runner)))
+                 region_name), 'exception on command {}'.format(runner), 'timeout on command {}'.format(runner)))
 
         deque_tasks: Deque[List[ThreadedFunctionData]] = collections.deque()
         deque_tasks.append(tasks)
-        execute_parallel_functions_in_threads(deque_tasks, 20, self.settings.command_timeout)
+        execute_parallel_functions_in_threads(deque_tasks, config.get('MAX_WORKERS'), self.settings.command_timeout)
 
-    def _scan_region_data(self, region, account_dir, summary: Queue):
-        dependable_commands = []
-        non_dependable_commands = []
-        for command in self.scan_commands:
-            if "Parameters" in command:
-                dependable_commands.append(command)
-            else:
-                non_dependable_commands.append(command)
-
+    def _scan_region_data(self, region: dict, dependent_commands: List[dict], independent_commands: List[dict]):
         non_dependable_tasks: List[ThreadedFunctionData] = []
         dependable_tasks: List[ThreadedFunctionData] = []
         deque_tasks: Deque[List[ThreadedFunctionData]] = collections.deque()
 
-        for non_dependable_command in non_dependable_commands:
+        for independent_command in independent_commands:
             non_dependable_tasks.append(ThreadedFunctionData(
                 self._run_scan_commands,
-                (region, non_dependable_command, account_dir, summary),
-                'exception on command {}'.format(non_dependable_command)))
+                (region, independent_command),
+                'exception on command {}'.format(independent_command)))
 
         deque_tasks.append(non_dependable_tasks)
 
-        for dependable_command in dependable_commands:
+        for dependent_command in dependent_commands:
             dependable_tasks.append(ThreadedFunctionData(
                 self._run_scan_commands,
-                (region, dependable_command, account_dir, summary),
-                'exception on command {}'.format(dependable_command)))
+                (region, dependent_command),
+                'exception on command {}'.format(dependent_command)))
 
         for dependable_task in dependable_tasks:
             deque_tasks.append([dependable_task])
-        execute_parallel_functions_in_threads(deque_tasks, 20)
+        execute_parallel_functions_in_threads(deque_tasks, config.get('MAX_WORKERS'))
 
     @staticmethod
     def _get_call_parameters(call_parameters: dict, parameters_def: list) -> List[dict]:
@@ -554,3 +523,12 @@ class AwsScanner(BaseCloudScanner):
     @lru_cache(maxsize=None)
     def _get_available_regions(self, service: str):
         return self.session.get_available_regions(service)
+
+    @staticmethod
+    def _parse_error(call_summary: dict) -> str:
+        return "  {}.{}({}): {}".format(
+            call_summary["service"],
+            call_summary["action"],
+            call_summary["parameters"],
+            call_summary["exception"],
+        )

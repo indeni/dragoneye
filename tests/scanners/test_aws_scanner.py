@@ -170,7 +170,7 @@ class TestAwsScanner(unittest.TestCase):
                 'Name': 'FieldName',
                 'Value': 'FieldValue'
             }]}]
-        when(dragoneye.cloud_scanner.aws.aws_scanner).load_yaml(self.aws_settings.commands_path).thenReturn(scan_command)
+        when(dragoneye.cloud_scanner.base_cloud_scanner).load_yaml(self.aws_settings.commands_path).thenReturn(scan_command)
         when(self.mock_handler).request1().thenReturn({'FieldName': 'UnmatchedFieldValue'})
 
         # Act
@@ -200,7 +200,7 @@ class TestAwsScanner(unittest.TestCase):
                 'Name': 'FieldName',
                 'Value': 'FieldValue'
             }]}]
-        when(dragoneye.cloud_scanner.aws.aws_scanner).load_yaml(self.aws_settings.commands_path).thenReturn(scan_command)
+        when(dragoneye.cloud_scanner.base_cloud_scanner).load_yaml(self.aws_settings.commands_path).thenReturn(scan_command)
         when(self.mock_handler).request1().thenReturn({'FieldName': 'FieldValue'})
 
         # Act
