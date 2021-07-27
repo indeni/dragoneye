@@ -510,10 +510,9 @@ class AwsScanner(BaseCloudScanner):
         param_groups = []
         for parameter in runner.get("Parameters", []):
             name = parameter["Name"]
-            value = parameter.get("Value") or parameter.get("Values")
-            is_dynamic = "|" in value
+            value = parameter.get("Value", parameter.get("Values"))
             parameter_keys.add(name)
-            if not is_dynamic:
+            if not self._is_dynamic_parameter(parameter):
                 param_groups = self._fill_simple_params(param_groups, name, value, parameter)
             else:
                 group = parameter.get("Group", False)

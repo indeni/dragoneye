@@ -59,7 +59,8 @@ class BaseCloudScanner:
 
     @staticmethod
     def _is_dynamic_parameter(parameter: dict):
-        return '|' in parameter['Value']
+        value = parameter.get('Value', parameter.get('Values'))
+        return isinstance(value, str) and '|' in value
 
     @staticmethod
     @abstractmethod
