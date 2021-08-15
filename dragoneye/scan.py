@@ -121,7 +121,7 @@ def azure(cloud_account_name: str,
         should_clean_before_scan=clean,
         output_path=output_path)
 
-    auth_header = AzureAuthorizer.get_authorization_token(tenant_id, client_id, client_secret)
+    auth_header = AzureAuthorizer.get_authorization_token(subscription_id, tenant_id, client_id, client_secret)
     output_path = AzureScanner(auth_header, azure_scan_settings).scan()
     click.echo(f'Results saved to {output_path}')
 
