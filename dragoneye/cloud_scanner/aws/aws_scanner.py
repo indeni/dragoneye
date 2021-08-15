@@ -289,9 +289,9 @@ class AwsScanner(BaseCloudScanner):
 
                 else:
                     logger.info("  ...paginating {}".format(output_file))
-                    for k in data:
-                        if isinstance(data[k], list):
-                            data[k].extend(response[k])
+                    for key, value in data.items():
+                        if isinstance(value, list):
+                            value.extend(response[key])
         else:
             function = getattr(handler, method_to_call)
             data = function(**parameters)
