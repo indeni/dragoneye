@@ -32,7 +32,7 @@ class AzureAuthorizer:
             token = AzureAuthorizer._get_token_from_credentials(tenant_id, client_id, client_secret)
 
         auth_token = f'Bearer {token}'
-        AzureAuthorizer._test_connectivity(subscription_id, auth_token)
+        AzureAuthorizer.test_connectivity(subscription_id, auth_token)
 
         logger.info('JWT bearer token generated successfully')
         return auth_token
@@ -79,7 +79,7 @@ class AzureAuthorizer:
             return json.loads(output)['accessToken']
 
     @staticmethod
-    def _test_connectivity(subscription_id, token):
+    def test_connectivity(subscription_id, token):
         headers = {
             'Authorization': token
         }
