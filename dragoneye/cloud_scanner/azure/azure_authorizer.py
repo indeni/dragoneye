@@ -31,11 +31,11 @@ class AzureAuthorizer:
         else:
             token = AzureAuthorizer._get_token_from_credentials(tenant_id, client_id, client_secret)
 
-        auth_header = f'Bearer {token}'
-        AzureAuthorizer._test_connectivity(subscription_id, auth_header)
+        auth_token = f'Bearer {token}'
+        AzureAuthorizer._test_connectivity(subscription_id, auth_token)
 
         logger.info('JWT bearer token generated successfully')
-        return auth_header
+        return auth_token
 
     @staticmethod
     def _get_token_from_credentials(tenant_id: str, client_id: str, client_secret: str) -> str:
