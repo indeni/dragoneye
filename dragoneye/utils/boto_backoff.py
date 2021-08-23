@@ -8,7 +8,7 @@ from dragoneye.utils.app_logger import logger
 RATE_ERRORS = ['Throttling', 'TooManyRequestsException']
 
 
-def rate_limiter(max_attempts=10):
+def rate_limiter(max_attempts=5):
     def decorator(func):
         @functools.wraps(func)
         def decorated(*args, **kwargs):
