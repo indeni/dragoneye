@@ -32,10 +32,7 @@ def elapsed_time(message=None):
 
 def make_directory(path) -> None:
     try:
-        if '.' in os.path.basename(path):
-            os.makedirs(os.path.dirname(path))
-        else:
-            os.makedirs(path)
+        os.mkdir(os.path.dirname(path))
     except OSError:
         # Already exists
         pass
