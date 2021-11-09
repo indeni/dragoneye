@@ -318,7 +318,6 @@ class AwsScanner(BaseCloudScanner):
     @staticmethod
     def _save_results_to_file(output_file: str, data: Optional[Dict]) -> None:
         if data is not None:
-            make_directory(output_file)
             with open(output_file, "w+") as file:
                 file.write(
                     json.dumps(data, indent=4, sort_keys=True, default=custom_serializer)
@@ -359,6 +358,7 @@ class AwsScanner(BaseCloudScanner):
         tasks: List[ThreadedFunctionData] = []
 
         if runner.get("Parameters"):
+            make_directory(filepath)
             for param_group in param_groups:
                 if set(param_group.keys()) != parameter_keys:
                     continue
