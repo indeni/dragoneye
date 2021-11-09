@@ -318,6 +318,7 @@ class AwsScanner(BaseCloudScanner):
     @staticmethod
     def _save_results_to_file(output_file: str, data: Optional[Dict]) -> None:
         if data is not None:
+            make_directory(output_file)
             with open(output_file, "w+") as file:
                 file.write(
                     json.dumps(data, indent=4, sort_keys=True, default=custom_serializer)
@@ -347,10 +348,7 @@ class AwsScanner(BaseCloudScanner):
             config=self.handler_config
         )
 
-        filepath = os.path.join(self.account_data_dir, region_name, f'{runner["Service"]}-{runner["Request"]}')
-        if "DirectoryName" in runner:
-            filepath = os.path.join(filepath, runner["DirectoryName"])
-
+        filepath = os.path.join(self.account_data_dir, region_name, runner.get("DirectoryName", ''), f'{runner["Service"]}-{runner["Request"]}')
         method_to_call = snakecase(runner["Request"])
         parameter_keys = set()
         param_groups = self._get_parameter_group(runner, self.account_data_dir, region, parameter_keys)
@@ -358,7 +356,6 @@ class AwsScanner(BaseCloudScanner):
         tasks: List[ThreadedFunctionData] = []
 
         if runner.get("Parameters"):
-            make_directory(filepath)
             for param_group in param_groups:
                 if set(param_group.keys()) != parameter_keys:
                     continue
