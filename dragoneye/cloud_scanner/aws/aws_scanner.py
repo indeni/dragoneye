@@ -347,7 +347,14 @@ class AwsScanner(BaseCloudScanner):
             config=self.handler_config
         )
 
-        filepath = os.path.join(self.account_data_dir, region_name, f'{runner["Service"]}-{runner["Request"]}')
+        if 'Filename' in runner:
+            path_suffix = runner.get("Filename")
+            use_static_name = True
+        else:
+            path_suffix = f'{runner["Service"]}-{runner["Request"]}'
+            use_static_name = False
+
+        filepath = os.path.join(self.account_data_dir, region_name, path_suffix)
 
         method_to_call = snakecase(runner["Request"])
         parameter_keys = set()
@@ -360,9 +367,12 @@ class AwsScanner(BaseCloudScanner):
             for param_group in param_groups:
                 if set(param_group.keys()) != parameter_keys:
                     continue
-                unparsed_file_name = '_'.join([f'{k}-{v}' if not isinstance(v, list) else k for k, v in param_group.items()])
-                file_name = urllib.parse.quote_plus(unparsed_file_name)
-                output_file = f"{filepath}/{file_name}.json"
+                if use_static_name:
+                    output_file = f"{filepath}.json"
+                else:
+                    unparsed_file_name = '_'.join([f'{k}-{v}' if not isinstance(v, list) else k for k, v in param_group.items()])
+                    file_name = urllib.parse.quote_plus(unparsed_file_name)
+                    output_file = os.path.join(filepath, f'{file_name}.json')
                 tasks.append(ThreadedFunctionData(
                     AwsScanner._get_and_save_data,
                     (self,
