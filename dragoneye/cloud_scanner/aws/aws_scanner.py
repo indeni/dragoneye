@@ -348,10 +348,13 @@ class AwsScanner(BaseCloudScanner):
             config=self.handler_config
         )
 
-        filepath = os.path.join(self.account_data_dir, region_name, runner.get("DirectoryName", ''), f'{runner["Service"]}-{runner["Request"]}')
+        filepath = os.path.join(self.account_data_dir, region_name, f'{runner["Service"]}-{runner["Request"]}')
         method_to_call = snakecase(runner["Request"])
         parameter_keys = set()
         param_groups = self._get_parameter_group(runner, self.account_data_dir, region, parameter_keys)
+        suffix = runner.get('FilenameSuffix', '')
+        if suffix:
+            suffix = '_' + suffix
 
         tasks: List[ThreadedFunctionData] = []
 
@@ -360,7 +363,7 @@ class AwsScanner(BaseCloudScanner):
                 if set(param_group.keys()) != parameter_keys:
                     continue
                 unparsed_file_name = '_'.join([f'{k}-{v}' if not isinstance(v, list) else k for k, v in param_group.items()])
-                file_name = urllib.parse.quote_plus(unparsed_file_name)
+                file_name = urllib.parse.quote_plus(unparsed_file_name) + suffix;
                 output_file = os.path.join(filepath, f'{file_name}.json')
                 tasks.append(ThreadedFunctionData(
                     AwsScanner._get_and_save_data,
@@ -374,7 +377,7 @@ class AwsScanner(BaseCloudScanner):
                     'exception on command {}'.format(runner),
                     'timeout on command {}'.format(runner)))
         else:
-            output_file = filepath + ".json"
+            output_file = filepath + suffix + ".json"
             tasks.append(ThreadedFunctionData(
                 AwsScanner._get_and_save_data,
                 (self,
