@@ -36,7 +36,7 @@ def make_directory(path) -> None:
             os.makedirs(os.path.dirname(path))
         else:
             os.makedirs(path)
-    except OSError as ex:
+    except OSError:
         # Already exists
         pass
 
