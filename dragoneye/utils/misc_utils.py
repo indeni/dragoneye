@@ -32,7 +32,7 @@ def elapsed_time(message=None):
 
 def make_directory(path) -> None:
     try:
-        os.mkdir(os.path.dirname(path))
+        os.mkdir(path)
     except OSError:
         # Already exists
         pass
