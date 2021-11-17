@@ -60,16 +60,19 @@ class GcpScanner(BaseCloudScanner):
     def _execute_scan_commands(self, scan_command: dict) -> None:
         service_name = scan_command['ServiceName']
         api_version = scan_command['ApiVersion']
-        resource_type = scan_command['ResourceType']
+        resource_types = scan_command['ResourceType']
+        resource_types: List[str] = [resource_types] if isinstance(resource_types, str) else resource_types
         method = scan_command['Method']
-        output_file = os.path.join(self.account_data_dir, f'{service_name}-{api_version}-{resource_type}-{method}.json')
+        output_file = os.path.join(self.account_data_dir, f'{service_name}-{api_version}-{"_".join(resource_types)}-{method}.json')
         if os.path.isfile(output_file):
             # Data already scanned, so skip
             logger.warning('Response already present at {}'.format(output_file))
             return
 
         service = self._create_service(service_name, api_version)
-        resource_response = getattr(service, resource_type)()
+        resource_response = getattr(service, resource_types[0])()
+        for resource_type in resource_types[1:]:
+            resource_response = getattr(resource_response, resource_type)()
 
         all_parameters = self._get_parameters(scan_command, self.account_data_dir)
         all_items = []
@@ -77,7 +80,7 @@ class GcpScanner(BaseCloudScanner):
         call_summary = {
             "service": service_name,
             "api_version": api_version,
-            "resource_type": resource_type,
+            "resource_type": resource_types,
             'method': method
         }
 
@@ -178,7 +181,10 @@ class GcpScanner(BaseCloudScanner):
                             all_items.extend(values)
                             break
 
-                    request = getattr(resource_response, method_name_next)(previous_request=request, previous_response=response)
+                    if next_method := getattr(resource_response, method_name_next, None):
+                        request = next_method(previous_request=request, previous_response=response)
+                    else:
+                        request = None
                 else:
                     if response:
                         all_items.append(response)
