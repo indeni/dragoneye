@@ -241,7 +241,7 @@ class TestGcpScanner(unittest.TestCase):
             self.assertEqual(len(failures), 2)
             failure_summary = {'service': 'service',
                                'api_version': 'v1',
-                               'resource_type': 'resource3',
+                               'resource_type': ['resource3'],
                                'method': 'get',
                                'exception': 'some message',
                                'parameters': {'param1': 'p1val1', 'param2': 'p2val1'}}
