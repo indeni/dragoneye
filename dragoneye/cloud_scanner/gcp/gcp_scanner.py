@@ -181,7 +181,8 @@ class GcpScanner(BaseCloudScanner):
                             all_items.extend(values)
                             break
 
-                    if next_method := getattr(resource_response, method_name_next, None):
+                    next_method = getattr(resource_response, method_name_next, None)
+                    if next_method:
                         request = next_method(previous_request=request, previous_response=response)
                     else:
                         request = None
