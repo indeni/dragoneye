@@ -2,6 +2,22 @@
 # 1. Results are saved to {ServiceName}-{ApiVersion}-{ResourceType}-{Method}.json
 # 2. In the parameter values, the value '$project' will be replaced by the project_id provided
 
+# https://cloud.google.com/kubernetes-engine/docs/reference/rest/v1/projects.zones.clusters/list
+- ServiceName: container
+  ApiVersion: v1
+  # When requiring a nested resource for a given service. For example when requiring the clusters resources from the
+  # service.projects().zones() resources, as described in the docs: https://cloud.google.com/kubernetes-engine/docs/reference/rest/v1/projects.zones.clusters/list#examples
+  ResourceType:
+    - projects
+    - zones
+    - clusters
+  Method: list
+  Parameters:
+    - Name: projectId
+      Value: $project
+    - Name: zone
+      Value: compute-v1-zones-list.json|.value[].name
+
 # https://cloud.google.com/resource-manager/reference/rest/v3/projects/get
 - ServiceName: cloudresourcemanager
   ApiVersion: v3
