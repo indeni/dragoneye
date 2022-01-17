@@ -63,7 +63,8 @@ class GcpScanner(BaseCloudScanner):
         resource_types = scan_command['ResourceType']
         resource_types: List[str] = [resource_types] if isinstance(resource_types, str) else resource_types
         method = scan_command['Method']
-        output_file = os.path.join(self.account_data_dir, f'{service_name}-{api_version}-{"_".join(resource_types)}-{method}.json')
+        output_file = scan_command.get('OutputFile')
+        output_file = f'{output_file}.json' if output_file else os.path.join(self.account_data_dir, f'{service_name}-{api_version}-{"_".join(resource_types)}-{method}.json')
         if os.path.isfile(output_file):
             # Data already scanned, so skip
             logger.warning('Response already present at {}'.format(output_file))
